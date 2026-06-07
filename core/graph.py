@@ -151,7 +151,7 @@ class Graph:
                 node.scope,
                 node.source,
                 now,
-                now,
+                node.created_at if node.created_at else now,
                 node.session_count,
             ),
         )

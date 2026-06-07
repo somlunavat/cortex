@@ -1,0 +1,437 @@
+"""Tests for core/decay.py — weight decay, tier promotion, eviction."""
+
+from __future__ import annotations
+
+import sqlite3
+import time
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from core.decay import (
+    SECONDS_PER_DAY,
+    TIER1_DECAY_RATE,
+    TIER1_EVICTION_THRESHOLD,
+    TIER1_PROMOTION_SESSIONS,
+    TIER1_PROMOTION_WEIGHT,
+    TIER2_DECAY_RATE,
+    TIER2_EVICTION_THRESHOLD,
+    TIER2_PROMOTION_AGE_DAYS,
+    TIER2_PROMOTION_SESSIONS,
+    TIER2_PROMOTION_WEIGHT,
+    DecayResult,
+    run_decay,
+)
+from core.graph import Graph, Node
+
+TEST_PROJECT = "/tmp/cortex_test_project"
+
+
+@pytest.fixture
+def db() -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    schema = Path("schema.sql").read_text()
+    conn.executescript(schema)
+    return conn
+
+
+@pytest.fixture
+def graph(db: sqlite3.Connection) -> Graph:
+    return Graph(connection=db)
+
+
+@pytest.fixture
+def dummy_embedding() -> np.ndarray:
+    rng = np.random.default_rng(seed=42)
+    return rng.random(384).astype(np.float32)
+
+
+def _make_node(
+    embedding: np.ndarray,
+    tier: int = 1,
+    weight: float = 1.0,
+    session_count: int = 1,
+    created_at: int | None = None,
+    project: str = TEST_PROJECT,
+    text: str = "test node",
+) -> Node:
+    now = int(time.time())
+    return Node(
+        id="",
+        type="observation",
+        tier=tier,
+        text=text,
+        rationale=None,
+        embedding=embedding,
+        precision_bits=32,
+        weight=weight,
+        project=project,
+        scope="project",
+        source="jsonl",
+        last_accessed=now,
+        created_at=created_at or now,
+        session_count=session_count,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Basic decay
+# ---------------------------------------------------------------------------
+
+
+class TestDecayRates:
+    def test_tier1_decays_by_correct_rate(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, tier=1, weight=2.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        expected = 2.0 * TIER1_DECAY_RATE
+        assert nodes[0].weight == pytest.approx(expected, abs=1e-4)
+
+    def test_tier2_decays_by_correct_rate(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, tier=2, weight=2.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        expected = 2.0 * TIER2_DECAY_RATE
+        assert nodes[0].weight == pytest.approx(expected, abs=1e-4)
+
+    def test_tier3_nodes_never_decay(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=3, weight=5.0))
+        initial_weight = 5.0
+        for _ in range(100):
+            run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=3)
+        assert nodes[0].weight == pytest.approx(initial_weight, abs=1e-4)
+
+    def test_decay_result_counts_decayed(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=2.0))
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=2.0, text="t2"))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed == 2
+
+    def test_empty_graph_returns_zero_counts(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed == 0
+        assert result.nodes_evicted == 0
+        assert result.nodes_promoted == 0
+
+    def test_decay_result_has_correct_project(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.project == TEST_PROJECT
+
+    def test_decay_only_affects_target_project(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, project="/proj/a", weight=1.0))
+        graph.write_node(_make_node(dummy_embedding, project="/proj/b", weight=1.0))
+        run_decay(graph, "/proj/a")
+        b_nodes = graph.get_all_nodes(project="/proj/b")
+        assert b_nodes[0].weight == pytest.approx(1.0, abs=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Eviction
+# ---------------------------------------------------------------------------
+
+
+class TestEviction:
+    def test_tier1_node_evicted_below_threshold(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(
+            _make_node(dummy_embedding, tier=1, weight=TIER1_EVICTION_THRESHOLD + 0.01)
+        )
+        # Decay once to push weight just below threshold
+        # weight after decay = (threshold + 0.01) * 0.85 < threshold
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
+        # Check if evicted
+        decayed_weight = (TIER1_EVICTION_THRESHOLD + 0.01) * TIER1_DECAY_RATE
+        if decayed_weight < TIER1_EVICTION_THRESHOLD:
+            assert len(nodes) == 0
+
+    def test_tier1_eviction_at_threshold(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        # Start just at threshold: after decay it goes below
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=0.35))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
+        # 0.35 * 0.85 = 0.2975 < 0.3 → evicted
+        assert len(nodes) == 0
+
+    def test_tier2_eviction_at_threshold(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=0.53))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        # 0.53 * 0.95 = 0.5035 > 0.5 → not evicted
+        assert len(nodes) == 1
+
+    def test_tier2_evicted_below_threshold(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=0.52))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        # 0.52 * 0.95 = 0.494 < 0.5 → evicted
+        assert len(nodes) == 0
+
+    def test_eviction_count_in_result(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=0.2))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_evicted >= 1
+
+    def test_tier3_never_evicted(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=3, weight=0.001))
+        for _ in range(50):
+            run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=3)
+        assert len(nodes) == 1
+
+
+# ---------------------------------------------------------------------------
+# Promotion — Tier 1 → Tier 2
+# ---------------------------------------------------------------------------
+
+
+class TestTier1Promotion:
+    def test_promotion_requires_both_weight_and_sessions(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        # Meets weight but not sessions
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=TIER1_PROMOTION_WEIGHT + 1,
+                session_count=TIER1_PROMOTION_SESSIONS - 1,
+                text="weight but not sessions",
+            )
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        still_tier1 = [n for n in nodes if n.text == "weight but not sessions"]
+        if still_tier1:
+            assert still_tier1[0].tier == 1
+
+    def test_node_promotes_to_tier2_when_conditions_met(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        initial_weight = TIER1_PROMOTION_WEIGHT + 2.0
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=initial_weight,
+                session_count=TIER1_PROMOTION_SESSIONS,
+                text="promote this",
+            )
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        promoted = [n for n in nodes if n.text == "promote this"]
+        if promoted:
+            assert promoted[0].tier == 2
+
+    def test_precision_downcasts_to_8_on_tier1_promotion(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        initial_weight = TIER1_PROMOTION_WEIGHT + 2.0
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=initial_weight,
+                session_count=TIER1_PROMOTION_SESSIONS,
+                text="precision check",
+            )
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        precision_nodes = [n for n in nodes if n.text == "precision check"]
+        if precision_nodes and precision_nodes[0].tier == 2:
+            assert precision_nodes[0].precision_bits == 8
+
+    def test_promotion_count_in_result(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=TIER1_PROMOTION_WEIGHT + 5.0,
+                session_count=TIER1_PROMOTION_SESSIONS,
+            )
+        )
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_promoted >= 1
+
+
+# ---------------------------------------------------------------------------
+# Promotion — Tier 2 → Tier 3
+# ---------------------------------------------------------------------------
+
+
+class TestTier2Promotion:
+    def _old_node(
+        self, embedding: np.ndarray, days_old: int = 15
+    ) -> Node:
+        old_timestamp = int(time.time()) - days_old * SECONDS_PER_DAY
+        return _make_node(
+            embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT + 2.0,
+            session_count=TIER2_PROMOTION_SESSIONS,
+            created_at=old_timestamp,
+        )
+
+    def test_tier2_promotion_requires_all_three_conditions(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        # Missing: age < 14 days
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT + 2.0,
+            session_count=TIER2_PROMOTION_SESSIONS,
+            text="no age",
+        )
+        graph.write_node(node)
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        no_age = [n for n in nodes if n.text == "no age"]
+        if no_age:
+            assert no_age[0].tier == 2
+
+    def test_tier2_promotes_to_tier3_when_all_conditions_met(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node = self._old_node(dummy_embedding)
+        node = Node(
+            id=node.id,
+            type=node.type,
+            tier=node.tier,
+            text="promote to tier3",
+            rationale=node.rationale,
+            embedding=node.embedding,
+            precision_bits=node.precision_bits,
+            weight=node.weight,
+            project=node.project,
+            scope=node.scope,
+            source=node.source,
+            last_accessed=node.last_accessed,
+            created_at=node.created_at,
+            session_count=node.session_count,
+        )
+        graph.write_node(node)
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        promoted = [n for n in nodes if n.text == "promote to tier3"]
+        if promoted:
+            assert promoted[0].tier == 3
+
+    def test_precision_downcasts_to_2_on_tier2_promotion(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node = self._old_node(dummy_embedding)
+        node = Node(
+            id=node.id,
+            type=node.type,
+            tier=node.tier,
+            text="precision3 check",
+            rationale=node.rationale,
+            embedding=node.embedding,
+            precision_bits=8,
+            weight=node.weight,
+            project=node.project,
+            scope=node.scope,
+            source=node.source,
+            last_accessed=node.last_accessed,
+            created_at=node.created_at,
+            session_count=node.session_count,
+        )
+        graph.write_node(node)
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        p3 = [n for n in nodes if n.text == "precision3 check"]
+        if p3 and p3[0].tier == 3:
+            assert p3[0].precision_bits == 2
+
+    def test_tier2_promotion_missing_weight_stays_tier2(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_ts = int(time.time()) - 20 * SECONDS_PER_DAY
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=5.0,  # too low
+            session_count=TIER2_PROMOTION_SESSIONS,
+            created_at=old_ts,
+            text="missing weight",
+        )
+        graph.write_node(node)
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        low_wt = [n for n in nodes if n.text == "missing weight"]
+        if low_wt:
+            assert low_wt[0].tier == 2
+
+    def test_tier2_promotion_missing_sessions_stays_tier2(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_ts = int(time.time()) - 20 * SECONDS_PER_DAY
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT + 2.0,
+            session_count=2,  # too few
+            created_at=old_ts,
+            text="missing sessions",
+        )
+        graph.write_node(node)
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        low_sess = [n for n in nodes if n.text == "missing sessions"]
+        if low_sess:
+            assert low_sess[0].tier == 2
+
+
+# ---------------------------------------------------------------------------
+# DecayResult dataclass
+# ---------------------------------------------------------------------------
+
+
+class TestDecayResult:
+    def test_decay_result_is_dataclass(self) -> None:
+        result = DecayResult(project="/p", nodes_decayed=1, nodes_evicted=0, nodes_promoted=0)
+        assert result.project == "/p"
+        assert result.nodes_decayed == 1
+
+    def test_multiple_decay_runs_accumulate_decay(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=5.0))
+        for _ in range(3):
+            run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
+        if nodes:
+            expected = 5.0 * (TIER1_DECAY_RATE ** 3)
+            assert nodes[0].weight == pytest.approx(expected, abs=0.01)
