@@ -9,17 +9,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from core.embedder import serialize
 from core.graph import Graph, Node
 from core.retrieval import (
-    TOKEN_BUDGET,
     BM25_WEIGHT,
     GRAPH_WEIGHT,
+    TOKEN_BUDGET,
     TOP_K,
     VECTOR_WEIGHT,
     ScoredNode,
-    build_bm25_index,
     bm25_channel,
+    build_bm25_index,
     format_injection_block,
     fuse_scores,
     graph_channel,
@@ -117,7 +116,9 @@ class TestVectorChannel:
         results = vector_channel(q, nodes)
         assert len(results) == 2
 
-    def test_identical_embedding_scores_near_one(self, rng: np.random.Generator) -> None:
+    def test_identical_embedding_scores_near_one(
+        self, rng: np.random.Generator
+    ) -> None:
         e = _random_embedding(rng)
         nodes = [_make_node("exact", embedding=e)]
         results = vector_channel(e, nodes)
@@ -274,7 +275,7 @@ class TestGraphChannel:
 
 class TestFuseScores:
     def _make_scored(self, nodes: list[Node], scores: list[float]) -> list[ScoredNode]:
-        return [ScoredNode(node=n, score=s) for n, s in zip(nodes, scores)]
+        return [ScoredNode(node=n, score=s) for n, s in zip(nodes, scores, strict=True)]
 
     def test_returns_correct_count(self, rng: np.random.Generator) -> None:
         nodes = [_make_node(f"n{i}") for i in range(3)]
@@ -352,8 +353,12 @@ class TestRetrieve:
         self, graph: Graph, rng: np.random.Generator
     ) -> None:
         e = _random_embedding(rng)
-        graph.write_node(_make_node("target project node", project=TEST_PROJECT, embedding=e))
-        graph.write_node(_make_node("other project node", project="/other", embedding=e))
+        graph.write_node(
+            _make_node("target project node", project=TEST_PROJECT, embedding=e)
+        )
+        graph.write_node(
+            _make_node("other project node", project="/other", embedding=e)
+        )
         result = retrieve("query", TEST_PROJECT, graph)
         assert all(n.project == TEST_PROJECT for n in result)
 
@@ -367,7 +372,9 @@ class TestRetrieve:
         for i in range(20):
             e = _random_embedding(rng)
             graph.write_node(
-                _make_node(f"very important context about topic {i}", tier=1, embedding=e)
+                _make_node(
+                    f"very important context about topic {i}", tier=1, embedding=e
+                )
             )
         result = retrieve("query", TEST_PROJECT, graph, budget_tokens=50)
         total_tokens = sum(len(enc.encode(n.text)) for n in result)

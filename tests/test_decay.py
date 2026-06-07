@@ -16,8 +16,6 @@ from core.decay import (
     TIER1_PROMOTION_SESSIONS,
     TIER1_PROMOTION_WEIGHT,
     TIER2_DECAY_RATE,
-    TIER2_EVICTION_THRESHOLD,
-    TIER2_PROMOTION_AGE_DAYS,
     TIER2_PROMOTION_SESSIONS,
     TIER2_PROMOTION_WEIGHT,
     DecayResult,
@@ -85,7 +83,7 @@ class TestDecayRates:
     def test_tier1_decays_by_correct_rate(
         self, graph: Graph, dummy_embedding: np.ndarray
     ) -> None:
-        node_id = graph.write_node(_make_node(dummy_embedding, tier=1, weight=2.0))
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=2.0))
         run_decay(graph, TEST_PROJECT)
         nodes = graph.get_all_nodes(project=TEST_PROJECT)
         expected = 2.0 * TIER1_DECAY_RATE
@@ -94,7 +92,7 @@ class TestDecayRates:
     def test_tier2_decays_by_correct_rate(
         self, graph: Graph, dummy_embedding: np.ndarray
     ) -> None:
-        node_id = graph.write_node(_make_node(dummy_embedding, tier=2, weight=2.0))
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=2.0))
         run_decay(graph, TEST_PROJECT)
         nodes = graph.get_all_nodes(project=TEST_PROJECT)
         expected = 2.0 * TIER2_DECAY_RATE
@@ -150,7 +148,7 @@ class TestEviction:
     def test_tier1_node_evicted_below_threshold(
         self, graph: Graph, dummy_embedding: np.ndarray
     ) -> None:
-        node_id = graph.write_node(
+        graph.write_node(
             _make_node(dummy_embedding, tier=1, weight=TIER1_EVICTION_THRESHOLD + 0.01)
         )
         # Decay once to push weight just below threshold
@@ -291,9 +289,7 @@ class TestTier1Promotion:
 
 
 class TestTier2Promotion:
-    def _old_node(
-        self, embedding: np.ndarray, days_old: int = 15
-    ) -> Node:
+    def _old_node(self, embedding: np.ndarray, days_old: int = 15) -> Node:
         old_timestamp = int(time.time()) - days_old * SECONDS_PER_DAY
         return _make_node(
             embedding,
@@ -421,7 +417,9 @@ class TestTier2Promotion:
 
 class TestDecayResult:
     def test_decay_result_is_dataclass(self) -> None:
-        result = DecayResult(project="/p", nodes_decayed=1, nodes_evicted=0, nodes_promoted=0)
+        result = DecayResult(
+            project="/p", nodes_decayed=1, nodes_evicted=0, nodes_promoted=0
+        )
         assert result.project == "/p"
         assert result.nodes_decayed == 1
 
@@ -433,5 +431,5 @@ class TestDecayResult:
             run_decay(graph, TEST_PROJECT)
         nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
         if nodes:
-            expected = 5.0 * (TIER1_DECAY_RATE ** 3)
+            expected = 5.0 * (TIER1_DECAY_RATE**3)
             assert nodes[0].weight == pytest.approx(expected, abs=0.01)

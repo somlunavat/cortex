@@ -1,0 +1,31 @@
+{
+  "name": "cortex",
+  "version": "0.1.0",
+  "description": "Persistent graph-based memory layer for Claude Code. Extracts structured memory nodes from session transcripts and injects compressed context at session start.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "command": "python3 ~/.cortex/hooks/inject.py",
+        "description": "Retrieve and inject relevant project memory context"
+      }
+    ],
+    "Stop": [
+      {
+        "command": "python3 ~/.cortex/hooks/extract.py",
+        "description": "Parse session transcript and write memory nodes to graph"
+      }
+    ],
+    "PostCompact": [
+      {
+        "command": "python3 ~/.cortex/hooks/compact.py",
+        "description": "Re-inject memory context after Claude Code compacts context"
+      }
+    ]
+  },
+  "skills": [
+    {
+      "name": "cortex-status",
+      "path": "skills/cortex-status/SKILL.md"
+    }
+  ]
+}

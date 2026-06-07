@@ -79,10 +79,10 @@ class TestRunExtract:
     def test_extract_writes_nodes_to_graph(self, graph: Graph) -> None:
         run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
         nodes = graph.get_all_nodes(project=TEST_PROJECT)
-        assert len(nodes) >= 0  # transcript may produce 0–N nodes
+        assert len(nodes) >= 0  # transcript may produce 0-N nodes
 
     def test_extract_idempotent_same_transcript(self, graph: Graph) -> None:
-        n1 = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
         n2 = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
         assert n2 == 0  # second run is a no-op
 
@@ -169,7 +169,9 @@ class TestRunInject:
         self, graph: Graph, rng: np.random.Generator
     ) -> None:
         e = rng.random(384).astype(np.float32)
-        graph.write_node(_make_node("auth middleware was modified", tier=1, embedding=e))
+        graph.write_node(
+            _make_node("auth middleware was modified", tier=1, embedding=e)
+        )
         result = run_inject(TEST_PROJECT, graph, query="")
         assert "RELEVANT CONTEXT" in result
 
@@ -193,8 +195,12 @@ class TestRunInject:
         self, graph: Graph, rng: np.random.Generator
     ) -> None:
         e = rng.random(384).astype(np.float32)
-        graph.write_node(_make_node("target project node", project=TEST_PROJECT, embedding=e))
-        graph.write_node(_make_node("other project node", project="/other/proj", embedding=e))
+        graph.write_node(
+            _make_node("target project node", project=TEST_PROJECT, embedding=e)
+        )
+        graph.write_node(
+            _make_node("other project node", project="/other/proj", embedding=e)
+        )
         result = run_inject(TEST_PROJECT, graph, query="")
         assert "target project node" in result
         assert "other project node" not in result
@@ -308,13 +314,18 @@ class TestMainFunctions:
         assert result == 0
 
     def test_inject_main_with_nodes_prints_block(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         db_path = tmp_path / "cortex.db"
         g = extract_open_graph(db_path)
         rng_local = np.random.default_rng(seed=99)
         e = rng_local.random(384).astype(np.float32)
-        g.write_node(_make_node("always use async", tier=3, embedding=e, project=TEST_PROJECT))
+        g.write_node(
+            _make_node("always use async", tier=3, embedding=e, project=TEST_PROJECT)
+        )
         monkeypatch.setenv("CLAUDE_PROJECT_PATH", TEST_PROJECT)
         monkeypatch.setenv("CORTEX_DB_PATH", str(db_path))
         monkeypatch.delenv("CLAUDE_INITIAL_MESSAGE", raising=False)
@@ -335,7 +346,9 @@ class TestMainFunctions:
         self, graph: Graph, rng: np.random.Generator
     ) -> None:
         e = rng.random(384).astype(np.float32)
-        graph.write_node(_make_node("auth/middleware.py is a hotspot", tier=1, embedding=e))
+        graph.write_node(
+            _make_node("auth/middleware.py is a hotspot", tier=1, embedding=e)
+        )
         initial_count = len(graph.get_all_nodes(project=TEST_PROJECT))
         run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
         assert len(graph.get_all_nodes(project=TEST_PROJECT)) >= initial_count
