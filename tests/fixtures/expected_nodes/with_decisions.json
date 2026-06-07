@@ -1,0 +1,33 @@
+{
+  "transcript": "with_decisions.jsonl",
+  "expected_nodes": [
+    {
+      "type": "fact",
+      "source": "nlp",
+      "text_contains": ["asyncpg", "chose"],
+      "rationale_contains": ["performance", "async"],
+      "scope": "project",
+      "note": "Decision sentence with 'because' conjunction — split into text/rationale"
+    },
+    {
+      "type": "convention",
+      "source": "nlp",
+      "text_contains": ["always", "validate"],
+      "scope": "project",
+      "note": "Convention statement with 'always' marker"
+    },
+    {
+      "type": "fact",
+      "source": "nlp",
+      "text_contains": ["JWT", "RS256", "selected"],
+      "rationale_contains": ["asymmetric", "secret"],
+      "scope": "project",
+      "note": "Second decision sentence with 'because' conjunction"
+    }
+  ],
+  "should_not_extract": [
+    "Actually let's not use that approach",
+    "Let me think about",
+    "probably yes"
+  ]
+}

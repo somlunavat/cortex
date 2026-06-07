@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          python -m spacy download en_core_web_sm
+
+      - name: Lint
+        run: ruff check . && black --check .
+
+      - name: Type check
+        run: mypy --strict --ignore-missing-imports core/ hooks/ cli/
+
+      - name: Unit tests
+        run: pytest tests/ -v --cov=core --cov-fail-under=90 -m "not slow"
+
+      - name: Security scan
+        run: bandit -r core/ hooks/ cli/ -ll
+
+  slow-tests:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          python -m spacy download en_core_web_sm
+      - name: Slow tests
+        run: pytest tests/ -m slow

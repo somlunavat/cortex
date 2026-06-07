@@ -1,0 +1,26 @@
+{"type": "session_start", "timestamp": 1717700000, "session_id": "sess_001", "data": {"project": "/tmp/cortex_test_project"}}
+{"type": "user_message", "timestamp": 1717700001, "session_id": "sess_001", "data": {"text": "Help me refactor the authentication module."}}
+{"type": "assistant_message", "timestamp": 1717700002, "session_id": "sess_001", "data": {"text": "I'll start by reading the current auth module to understand its structure."}}
+{"type": "tool_use", "timestamp": 1717700003, "session_id": "sess_001", "data": {"tool_name": "Read", "tool_input": {"file_path": "/tmp/cortex_test_project/auth/middleware.py"}}}
+{"type": "file_read", "timestamp": 1717700004, "session_id": "sess_001", "data": {"path": "/tmp/cortex_test_project/auth/middleware.py"}}
+{"type": "assistant_message", "timestamp": 1717700010, "session_id": "sess_001", "data": {"text": "I can see the middleware needs updating. Let me refactor the JWT validation logic."}}
+{"type": "tool_use", "timestamp": 1717700011, "session_id": "sess_001", "data": {"tool_name": "Edit", "tool_input": {"file_path": "/tmp/cortex_test_project/auth/middleware.py"}}}
+{"type": "file_write", "timestamp": 1717700012, "session_id": "sess_001", "data": {"path": "/tmp/cortex_test_project/auth/middleware.py"}}
+{"type": "tool_use", "timestamp": 1717700020, "session_id": "sess_001", "data": {"tool_name": "Bash", "tool_input": {"command": "pytest tests/test_auth.py -x"}}}
+{"type": "bash_exec", "timestamp": 1717700021, "session_id": "sess_001", "data": {"command": "pytest tests/test_auth.py -x", "exit_code": 1, "output": "FAILED tests/test_auth.py::test_jwt_expiry - ImportError: cannot import name 'validate_jwt' from 'auth.middleware'"}}
+{"type": "bash_failure", "timestamp": 1717700021, "session_id": "sess_001", "data": {"command": "pytest tests/test_auth.py -x", "exit_code": 1, "output": "FAILED tests/test_auth.py::test_jwt_expiry - ImportError: cannot import name 'validate_jwt' from 'auth.middleware'"}}
+{"type": "assistant_message", "timestamp": 1717700022, "session_id": "sess_001", "data": {"text": "The import failed because I renamed the function. Let me fix that."}}
+{"type": "tool_use", "timestamp": 1717700023, "session_id": "sess_001", "data": {"tool_name": "Edit", "tool_input": {"file_path": "/tmp/cortex_test_project/auth/middleware.py"}}}
+{"type": "file_write", "timestamp": 1717700024, "session_id": "sess_001", "data": {"path": "/tmp/cortex_test_project/auth/middleware.py"}}
+{"type": "tool_use", "timestamp": 1717700030, "session_id": "sess_001", "data": {"tool_name": "Edit", "tool_input": {"file_path": "/tmp/cortex_test_project/auth/middleware.py"}}}
+{"type": "file_write", "timestamp": 1717700031, "session_id": "sess_001", "data": {"path": "/tmp/cortex_test_project/auth/middleware.py"}}
+{"type": "tool_use", "timestamp": 1717700038, "session_id": "sess_001", "data": {"tool_name": "Edit", "tool_input": {"file_path": "/tmp/cortex_test_project/auth/middleware.py"}}}
+{"type": "file_write", "timestamp": 1717700039, "session_id": "sess_001", "data": {"path": "/tmp/cortex_test_project/auth/middleware.py"}}
+{"type": "tool_use", "timestamp": 1717700040, "session_id": "sess_001", "data": {"tool_name": "Edit", "tool_input": {"file_path": "/tmp/cortex_test_project/api/handler.py"}}}
+{"type": "file_write", "timestamp": 1717700041, "session_id": "sess_001", "data": {"path": "/tmp/cortex_test_project/api/handler.py"}}
+{"type": "tool_use", "timestamp": 1717700042, "session_id": "sess_001", "data": {"tool_name": "Edit", "tool_input": {"file_path": "/tmp/cortex_test_project/api/handler.py"}}}
+{"type": "file_write", "timestamp": 1717700043, "session_id": "sess_001", "data": {"path": "/tmp/cortex_test_project/api/handler.py"}}
+{"type": "tool_use", "timestamp": 1717700050, "session_id": "sess_001", "data": {"tool_name": "Bash", "tool_input": {"command": "pytest tests/test_auth.py -x"}}}
+{"type": "bash_exec", "timestamp": 1717700051, "session_id": "sess_001", "data": {"command": "pytest tests/test_auth.py -x", "exit_code": 0, "output": "5 passed in 0.42s"}}
+{"type": "bash_success", "timestamp": 1717700051, "session_id": "sess_001", "data": {"command": "pytest tests/test_auth.py -x", "exit_code": 0, "output": "5 passed in 0.42s"}}
+{"type": "session_end", "timestamp": 1717700060, "session_id": "sess_001", "data": {"project": "/tmp/cortex_test_project"}}

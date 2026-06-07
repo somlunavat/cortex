@@ -1,0 +1,11 @@
+{"type": "session_start", "timestamp": 1717800000, "session_id": "sess_002", "data": {"project": "/tmp/cortex_test_project"}}
+{"type": "user_message", "timestamp": 1717800001, "session_id": "sess_002", "data": {"text": "Which database driver should we use for the new async API?"}}
+{"type": "assistant_message", "timestamp": 1717800002, "session_id": "sess_002", "data": {"text": "I chose asyncpg over SQLAlchemy because asyncpg provides native async support with significantly better performance for high-concurrency workloads."}}
+{"type": "assistant_message", "timestamp": 1717800010, "session_id": "sess_002", "data": {"text": "We always validate user input at the API boundary before it reaches the business logic layer."}}
+{"type": "user_message", "timestamp": 1717800015, "session_id": "sess_002", "data": {"text": "What about the caching layer?"}}
+{"type": "assistant_message", "timestamp": 1717800016, "session_id": "sess_002", "data": {"text": "I decided to avoid Redis for now because the data access patterns are simple enough that an in-process LRU cache handles the load."}}
+{"type": "assistant_message", "timestamp": 1717800020, "session_id": "sess_002", "data": {"text": "Actually let's not use that approach — the LRU cache will cause inconsistency across multiple worker processes."}}
+{"type": "user_message", "timestamp": 1717800025, "session_id": "sess_002", "data": {"text": "How should we handle authentication tokens?"}}
+{"type": "assistant_message", "timestamp": 1717800026, "session_id": "sess_002", "data": {"text": "I selected JWT with RS256 signing because asymmetric keys allow verification without exposing the signing secret to read-only services."}}
+{"type": "assistant_message", "timestamp": 1717800030, "session_id": "sess_002", "data": {"text": "Let me think about whether we need refresh token rotation... probably yes for security."}}
+{"type": "session_end", "timestamp": 1717800040, "session_id": "sess_002", "data": {"project": "/tmp/cortex_test_project"}}

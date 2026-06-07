@@ -1,0 +1,24 @@
+{
+  "transcript": "simple.jsonl",
+  "expected_nodes": [
+    {
+      "type": "observation",
+      "source": "jsonl",
+      "text_contains": ["auth/middleware.py"],
+      "scope": "module",
+      "note": "File written 4 times — hotspot signal"
+    },
+    {
+      "type": "error",
+      "source": "jsonl",
+      "text_contains": ["ImportError", "pytest"],
+      "scope": "session",
+      "note": "Bash failure with exit code 1"
+    }
+  ],
+  "should_not_extract": [
+    "I'll start by reading",
+    "I can see the middleware",
+    "The import failed"
+  ]
+}
