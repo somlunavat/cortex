@@ -13,6 +13,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from core.parser import EventType, ParsedEvent
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -63,8 +65,6 @@ MAX_TEXT_LENGTH = 200
 # ---------------------------------------------------------------------------
 # Channel 1: JSONL signals
 # ---------------------------------------------------------------------------
-
-from core.parser import EventType, ParsedEvent  # noqa: E402  (circular-safe)
 
 
 def jsonl_channel(events: list[ParsedEvent], project: str) -> list[CandidateNode]:
@@ -630,13 +630,11 @@ def run_extraction(
     Returns:
         Merged list of CandidateNode objects, deduplicated by text.
     """
-    from core.parser import EventType as EventTypeAlias
-
     if touched_files is None:
         seen: set[str] = set()
         touched_files = []
         for e in events:
-            if e.type == EventTypeAlias.FILE_WRITE:
+            if e.type == EventType.FILE_WRITE:
                 p = e.data.get("path", "")
                 if p and p not in seen:
                     seen.add(p)
@@ -645,7 +643,7 @@ def run_extraction(
     prose_turns = [
         str(e.data.get("text", ""))
         for e in events
-        if e.type == EventTypeAlias.ASSISTANT_MESSAGE and e.data.get("text")
+        if e.type == EventType.ASSISTANT_MESSAGE and e.data.get("text")
     ]
 
     all_candidates: list[CandidateNode] = []
