@@ -199,9 +199,7 @@ def ast_channel(touched_files: list[Path], project: str) -> list[CandidateNode]:
 
 def _is_test_file(path: Path) -> bool:
     """Return True if the path looks like a test file."""
-    name = path.name
-    parts = path.parts
-    return name.startswith("test_") or "tests" in parts or "/tests/" in str(path)
+    return path.name.startswith("test_") or "tests" in path.parts
 
 
 def _diff_file_ast(file_path: Path, project: str) -> list[dict[str, Any]]:
