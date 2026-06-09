@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from core.embedder import cosine_similarity, deserialize, serialize
+
 
 @dataclass
 class Node:
@@ -43,38 +45,11 @@ class Edge:
     last_seen: int
 
 
-def _serialize_embedding(arr: np.ndarray) -> bytes:
-    """Serialize a numpy array to bytes for SQLite BLOB storage."""
-    return arr.tobytes()
-
-
-def _deserialize_embedding(blob: bytes, precision_bits: int = 32) -> np.ndarray:
-    """Deserialize a SQLite BLOB back to a numpy array."""
-    match precision_bits:
-        case 32:
-            return np.frombuffer(blob, dtype=np.float32).copy()
-        case 8 | 2:
-            return np.frombuffer(blob, dtype=np.int8).copy()
-        case _:
-            return np.frombuffer(blob, dtype=np.float32).copy()
-
-
-def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    """Compute cosine similarity between two vectors."""
-    a_f = a.astype(np.float32)
-    b_f = b.astype(np.float32)
-    norm_a = float(np.linalg.norm(a_f))
-    norm_b = float(np.linalg.norm(b_f))
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return float(np.dot(a_f, b_f) / (norm_a * norm_b))
-
-
 def _row_to_node(row: sqlite3.Row) -> Node:
     """Convert a sqlite3.Row to a Node dataclass."""
     embedding: np.ndarray | None = None
     if row["embedding"] is not None:
-        embedding = _deserialize_embedding(row["embedding"], row["precision_bits"])
+        embedding = deserialize(row["embedding"], row["precision_bits"])
     return Node(
         id=row["id"],
         type=row["type"],
@@ -129,7 +104,7 @@ class Graph:
         now = int(time.time())
         embedding_blob: bytes | None = None
         if node.embedding is not None:
-            embedding_blob = _serialize_embedding(node.embedding.astype(np.float32))
+            embedding_blob = serialize(node.embedding, node.precision_bits)
         self._conn.execute(
             """
             INSERT INTO nodes (
@@ -239,12 +214,28 @@ class Graph:
             node = _row_to_node(row)
             if node.embedding is None:
                 continue
-            sim = _cosine_similarity(embedding, node.embedding)
+            sim = cosine_similarity(embedding, node.embedding)
             if sim >= threshold:
                 scored.append((sim, node))
 
         scored.sort(key=lambda x: x[0], reverse=True)
         return [node for _, node in scored[:limit]]
+
+    def get_node(self, node_id: str) -> Node | None:
+        """Return a single node by UUID, or None if not found.
+
+        Args:
+            node_id: UUID of the node to fetch.
+
+        Returns:
+            Node dataclass, or None.
+        """
+        row = self._conn.execute(
+            "SELECT * FROM nodes WHERE id = ?", (node_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return _row_to_node(row)
 
     def get_all_nodes(self, project: str, tier: int | None = None) -> list[Node]:
         """Return all nodes for a project, optionally filtered by tier.
@@ -277,6 +268,51 @@ class Graph:
             node_id: UUID of the node to delete.
         """
         self._conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
+        self._conn.commit()
+
+    def delete_all_nodes(self, project: str) -> int:
+        """Delete all nodes (and their edges) for a project in one statement.
+
+        Args:
+            project: Absolute project path.
+
+        Returns:
+            Number of nodes deleted.
+        """
+        cursor = self._conn.execute(
+            "DELETE FROM nodes WHERE project = ?", (project,)
+        )
+        self._conn.commit()
+        return cursor.rowcount
+
+    def update_node_tier(
+        self,
+        node_id: str,
+        new_tier: int,
+        new_precision: int,
+        embedding_blob: bytes | None,
+        now: int,
+    ) -> None:
+        """Promote a node to a higher tier with downcast embedding precision.
+
+        Args:
+            node_id: UUID of the node to promote.
+            new_tier: Target tier (2 or 3).
+            new_precision: Target precision_bits (8 or 2).
+            embedding_blob: Re-serialized embedding at the new precision, or None.
+            now: Current unix timestamp for last_accessed.
+        """
+        self._conn.execute(
+            """
+            UPDATE nodes
+            SET tier = ?,
+                precision_bits = ?,
+                embedding = ?,
+                last_accessed = ?
+            WHERE id = ?
+            """,
+            (new_tier, new_precision, embedding_blob, now, node_id),
+        )
         self._conn.commit()
 
     # ------------------------------------------------------------------
