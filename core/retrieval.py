@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 from rank_bm25 import BM25Okapi
@@ -180,11 +181,20 @@ def fuse_scores(
     return sorted(fused, key=lambda sn: sn.score, reverse=True)
 
 
+@lru_cache(maxsize=1)
+def _get_tokenizer() -> object:
+    """Lazy-load the cl100k_base tiktoken encoder (cached after first call)."""
+    import tiktoken
+
+    return tiktoken.get_encoding("cl100k_base")
+
+
 def _count_tokens(text: str) -> int:
     """Count cl100k_base tokens in a string."""
     import tiktoken
 
-    enc = tiktoken.get_encoding("cl100k_base")
+    enc = _get_tokenizer()
+    assert isinstance(enc, tiktoken.Encoding)
     return len(enc.encode(text))
 
 
