@@ -212,8 +212,7 @@ def reset(
         raise typer.Exit(0)
 
     project = str(root)
-    nodes = g.get_all_nodes(project=project)
-    count = len(nodes)
+    count = len(g.get_all_nodes(project=project))
 
     if not confirm:
         typer.confirm(
@@ -221,10 +220,8 @@ def reset(
             abort=True,
         )
 
-    for node in nodes:
-        g.delete_node(node.id)
-
-    console.print(f"[green]Reset complete:[/green] removed {count} nodes for {project}")
+    deleted = g.delete_all_nodes(project)
+    console.print(f"[green]Reset complete:[/green] removed {deleted} nodes for {project}")
 
 
 @app.command()
