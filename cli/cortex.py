@@ -151,9 +151,7 @@ def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> 
         console.print("[yellow]No Cortex database found.[/yellow]")
         raise typer.Exit(1)
 
-    project = str(root)
-    nodes = g.get_all_nodes(project=project)
-    target = next((n for n in nodes if n.id == node_id), None)
+    target = g.get_node(node_id)
 
     if target is None:
         console.print(f"[red]Node not found:[/red] {node_id}")
@@ -188,9 +186,7 @@ def prune(node_id: str = typer.Argument(..., help="Node UUID to evict")) -> None
         console.print("[yellow]No Cortex database found.[/yellow]")
         raise typer.Exit(1)
 
-    project = str(root)
-    nodes = g.get_all_nodes(project=project)
-    target = next((n for n in nodes if n.id == node_id), None)
+    target = g.get_node(node_id)
 
     if target is None:
         console.print(f"[red]Node not found:[/red] {node_id}")
