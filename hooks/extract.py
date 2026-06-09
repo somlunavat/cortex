@@ -16,7 +16,7 @@ from core.decay import run_decay
 from core.embedder import embed
 from core.extractor import run_extraction
 from core.graph import Graph, Node
-from core.parser import EventType, parse_transcript, summarize_session
+from core.parser import EventType, parse_transcript
 
 _SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
 
@@ -58,7 +58,6 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
     if not events:
         return 0
 
-    summarize_session(events)
     session_start = min(e.timestamp for e in events)
 
     touched_files = [
