@@ -9,6 +9,9 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
+import numpy as np
+
+from core.embedder import serialize
 from core.graph import Graph, Node
 
 # ---------------------------------------------------------------------------
@@ -136,27 +139,14 @@ def _promote_node(
         new_precision: Target precision_bits (8 or 2).
         now: Current unix timestamp.
     """
-    import numpy as np
-
-    from core.embedder import serialize
-
-    # Downcast the stored embedding
     new_blob: bytes | None = None
     if node.embedding is not None:
-        # Re-serialize at lower precision
-        new_blob = serialize(
-            node.embedding.astype(np.float32), precision_bits=new_precision
-        )
+        new_blob = serialize(node.embedding.astype(np.float32), new_precision)
 
-    graph._conn.execute(
-        """
-        UPDATE nodes
-        SET tier = ?,
-            precision_bits = ?,
-            embedding = ?,
-            last_accessed = ?
-        WHERE id = ?
-        """,
-        (new_tier, new_precision, new_blob, now, node.id),
+    graph.update_node_tier(
+        node_id=node.id,
+        new_tier=new_tier,
+        new_precision=new_precision,
+        embedding_blob=new_blob,
+        now=now,
     )
-    graph._conn.commit()
