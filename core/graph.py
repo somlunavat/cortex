@@ -9,10 +9,22 @@ import sqlite3
 import time
 import uuid
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 
 from core.embedder import cosine_similarity, deserialize, serialize
+
+
+@lru_cache(maxsize=4096)
+def _cached_deserialize(blob: bytes, precision_bits: int) -> np.ndarray:
+    """Deserialize an embedding blob, caching the result by (blob, precision).
+
+    The cache avoids repeated deserialization of the same node embedding
+    across multiple find_similar calls within one session. The key is the
+    raw blob bytes, which is immutable after write.
+    """
+    return deserialize(blob, precision_bits)
 
 
 @dataclass
@@ -49,7 +61,7 @@ def _row_to_node(row: sqlite3.Row) -> Node:
     """Convert a sqlite3.Row to a Node dataclass."""
     embedding: np.ndarray | None = None
     if row["embedding"] is not None:
-        embedding = deserialize(row["embedding"], row["precision_bits"])
+        embedding = _cached_deserialize(bytes(row["embedding"]), row["precision_bits"])
     return Node(
         id=row["id"],
         type=row["type"],
