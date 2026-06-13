@@ -9,11 +9,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from cli.config import SCHEMA_PATH, _apply_migrations
 from core.graph import Graph, Node
-from hooks.extract import _open_graph as extract_open_graph
 from hooks.extract import main as extract_main
 from hooks.extract import run_extract
-from hooks.inject import _open_graph as inject_open_graph
 from hooks.inject import main as inject_main
 from hooks.inject import run_inject
 
@@ -26,8 +25,8 @@ DECISIONS_TRANSCRIPT = Path("tests/fixtures/transcripts/with_decisions.jsonl")
 def db() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    schema = Path("schema.sql").read_text()
-    conn.executescript(schema)
+    conn.executescript(SCHEMA_PATH.read_text())
+    _apply_migrations(conn)
     return conn
 
 
@@ -39,6 +38,27 @@ def graph(db: sqlite3.Connection) -> Graph:
 @pytest.fixture
 def rng() -> np.random.Generator:
     return np.random.default_rng(seed=42)
+
+
+def _create_graph_at(db_path: Path) -> Graph:
+    """Create (or open) a Graph at a specific file path — test helper only."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_PATH.read_text())
+    _apply_migrations(conn)
+    return Graph(connection=conn)
+
+
+def _open_graph_at(db_path: Path) -> Graph | None:
+    """Open an existing Graph file — test helper only."""
+    if not db_path.exists():
+        return None
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA_PATH.read_text())
+    _apply_migrations(conn)
+    return Graph(connection=conn)
 
 
 def _make_node(
@@ -205,6 +225,26 @@ class TestRunInject:
         assert "target project node" in result
         assert "other project node" not in result
 
+    def test_inject_updates_last_accessed_for_retrieved_nodes(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = rng.random(384).astype(np.float32)
+        node_id = graph.write_node(
+            _make_node("convention node", tier=3, embedding=e)
+        )
+        before = graph.get_node(node_id)
+        assert before is not None
+        before_ts = before.last_accessed
+
+        # Small sleep to ensure timestamp advances
+        import time as _time
+        _time.sleep(1)
+
+        run_inject(TEST_PROJECT, graph, query="")
+        after = graph.get_node(node_id)
+        assert after is not None
+        assert after.last_accessed >= before_ts
+
 
 # ---------------------------------------------------------------------------
 # Integration: extract → inject round-trip
@@ -234,31 +274,31 @@ class TestExtractInjectLoop:
 
 
 # ---------------------------------------------------------------------------
-# _open_graph helpers
+# open_graph helpers (via shared factory)
 # ---------------------------------------------------------------------------
 
 
 class TestOpenGraph:
-    def test_extract_open_graph_creates_db(self, tmp_path: Path) -> None:
+    def test_create_graph_at_creates_db(self, tmp_path: Path) -> None:
         db_path = tmp_path / "test.db"
-        graph = extract_open_graph(db_path)
+        graph = _create_graph_at(db_path)
         assert db_path.exists()
         assert isinstance(graph, Graph)
 
-    def test_inject_open_graph_returns_none_if_missing(self, tmp_path: Path) -> None:
+    def test_open_graph_at_returns_none_if_missing(self, tmp_path: Path) -> None:
         db_path = tmp_path / "nonexistent.db"
-        result = inject_open_graph(db_path)
+        result = _open_graph_at(db_path)
         assert result is None
 
-    def test_inject_open_graph_returns_graph_if_exists(self, tmp_path: Path) -> None:
+    def test_open_graph_at_returns_graph_if_exists(self, tmp_path: Path) -> None:
         db_path = tmp_path / "test.db"
-        extract_open_graph(db_path)  # create it
-        graph = inject_open_graph(db_path)
+        _create_graph_at(db_path)  # create it
+        graph = _open_graph_at(db_path)
         assert isinstance(graph, Graph)
 
-    def test_extract_open_graph_creates_parent_dirs(self, tmp_path: Path) -> None:
+    def test_create_graph_at_creates_parent_dirs(self, tmp_path: Path) -> None:
         db_path = tmp_path / "nested" / "cortex.db"
-        extract_open_graph(db_path)
+        _create_graph_at(db_path)
         assert db_path.exists()
 
 
@@ -306,7 +346,7 @@ class TestMainFunctions:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         db_path = tmp_path / "cortex.db"
-        extract_open_graph(db_path)  # create the DB
+        _create_graph_at(db_path)  # create the DB
         monkeypatch.setenv("CLAUDE_PROJECT_PATH", TEST_PROJECT)
         monkeypatch.setenv("CORTEX_DB_PATH", str(db_path))
         monkeypatch.delenv("CLAUDE_INITIAL_MESSAGE", raising=False)
@@ -320,7 +360,7 @@ class TestMainFunctions:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         db_path = tmp_path / "cortex.db"
-        g = extract_open_graph(db_path)
+        g = _create_graph_at(db_path)
         rng_local = np.random.default_rng(seed=99)
         e = rng_local.random(384).astype(np.float32)
         g.write_node(
@@ -356,29 +396,24 @@ class TestMainFunctions:
     def test_extract_main_exception_returns_one(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        db_path = tmp_path / "cortex.db"
-        # Make extract_open_graph raise by providing a bad schema path
         monkeypatch.setenv("CLAUDE_TRANSCRIPT", str(SIMPLE_TRANSCRIPT))
         monkeypatch.setenv("CLAUDE_PROJECT_PATH", TEST_PROJECT)
-        monkeypatch.setenv("CORTEX_DB_PATH", str(db_path))
+        monkeypatch.setenv("CORTEX_DB_PATH", str(tmp_path / "cortex.db"))
 
         import hooks.extract as ext_mod
 
-        original = ext_mod._open_graph  # type: ignore[attr-defined]
-
-        def raise_always(p: Path) -> Graph:
+        def raise_always(project_root: Path, *, create: bool = False) -> Graph:
             raise RuntimeError("forced failure")
 
-        monkeypatch.setattr(ext_mod, "_open_graph", raise_always)
+        monkeypatch.setattr(ext_mod, "open_graph", raise_always)
         result = extract_main()
         assert result == 1
-        monkeypatch.setattr(ext_mod, "_open_graph", original)
 
     def test_inject_main_exception_returns_one(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         db_path = tmp_path / "cortex.db"
-        extract_open_graph(db_path)
+        _create_graph_at(db_path)
         monkeypatch.setenv("CLAUDE_PROJECT_PATH", TEST_PROJECT)
         monkeypatch.setenv("CORTEX_DB_PATH", str(db_path))
         monkeypatch.delenv("CLAUDE_INITIAL_MESSAGE", raising=False)
