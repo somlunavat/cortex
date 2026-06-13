@@ -115,6 +115,9 @@ def graph_channel(
     - Seed nodes themselves: score 0.0 (handled by other channels)
     - Unreachable nodes: score 0.0
 
+    Uses get_edges_for_nodes() to fetch all required edges in two SQL queries
+    instead of one query per node.
+
     Args:
         seed_nodes: Starting nodes (typically top-3 by vector score).
         graph: Graph instance for edge lookups.
@@ -127,18 +130,24 @@ def graph_channel(
     node_map = {n.id: n for n in all_nodes}
     hop_scores: dict[str, float] = {}
 
+    # Single query for all seed edges
+    seed_edge_map = graph.get_edges_for_nodes([n.id for n in seed_nodes])
+
     for seed in seed_nodes:
-        for edge in graph.get_edges(seed.id):
+        for edge in seed_edge_map.get(seed.id, []):
             neighbor_id = (
                 edge.target_id if edge.source_id == seed.id else edge.source_id
             )
             if neighbor_id not in seed_ids:
                 hop_scores[neighbor_id] = max(hop_scores.get(neighbor_id, 0.0), 0.5)
 
-    for hop1_id in list(hop_scores.keys()):
-        if hop1_id not in node_map:
-            continue
-        for edge in graph.get_edges(hop1_id):
+    hop1_ids = [nid for nid in hop_scores if nid in node_map]
+
+    # Single query for all hop-1 edges
+    hop1_edge_map = graph.get_edges_for_nodes(hop1_ids)
+
+    for hop1_id in hop1_ids:
+        for edge in hop1_edge_map.get(hop1_id, []):
             neighbor_id = (
                 edge.target_id if edge.source_id == hop1_id else edge.source_id
             )
