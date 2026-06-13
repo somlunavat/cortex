@@ -375,6 +375,47 @@ class Graph:
             for row in rows
         ]
 
+    def get_edges_for_nodes(self, node_ids: list[str]) -> dict[str, list[Edge]]:
+        """Return all edges for a set of nodes in two SQL queries.
+
+        Much more efficient than calling get_edges() in a loop when many
+        nodes need their adjacency lists at once (e.g. graph_channel).
+
+        Args:
+            node_ids: UUIDs to fetch edges for.
+
+        Returns:
+            Mapping from node_id to the list of Edge objects touching it.
+        """
+        if not node_ids:
+            return {}
+
+        placeholders = ",".join("?" * len(node_ids))
+        rows = self._conn.execute(
+            f"""
+            SELECT source_id, target_id, strength, last_seen
+            FROM edges
+            WHERE source_id IN ({placeholders})
+               OR target_id IN ({placeholders})
+            """,
+            node_ids + node_ids,
+        ).fetchall()
+
+        result: dict[str, list[Edge]] = {nid: [] for nid in node_ids}
+        for row in rows:
+            edge = Edge(
+                source_id=row["source_id"],
+                target_id=row["target_id"],
+                strength=row["strength"],
+                last_seen=row["last_seen"],
+            )
+            if row["source_id"] in result:
+                result[row["source_id"]].append(edge)
+            if row["target_id"] in result:
+                result[row["target_id"]].append(edge)
+
+        return result
+
     # ------------------------------------------------------------------
     # Weight
     # ------------------------------------------------------------------
