@@ -37,6 +37,43 @@ def _get_model() -> object | None:
     return _model
 
 
+def embed_batch(texts: list[str]) -> list[np.ndarray]:
+    """Embed a list of strings in a single model forward pass.
+
+    Much faster than calling embed() in a loop because sentence-transformers
+    can batch-encode on GPU or optimised CPU kernels. Falls back to zero
+    vectors if the model is unavailable.
+
+    Args:
+        texts: List of strings to embed.
+
+    Returns:
+        List of float32 numpy arrays of shape (384,), one per input string.
+    """
+    if not texts:
+        return []
+
+    model = _get_model()
+    if model is None:
+        return [np.zeros(_EMBEDDING_DIM, dtype=np.float32) for _ in texts]
+
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        assert isinstance(model, SentenceTransformer)
+        results = model.encode(texts, convert_to_numpy=True, batch_size=64)
+        out: list[np.ndarray] = []
+        for r in results:
+            arr = np.asarray(r, dtype=np.float32)
+            if arr.ndim > 1:
+                arr = arr.squeeze()
+            out.append(arr.astype(np.float32))
+        return out
+    except Exception as exc:
+        logger.warning("Batch embedding failed: %s; using zero vectors", exc)
+        return [np.zeros(_EMBEDDING_DIM, dtype=np.float32) for _ in texts]
+
+
 def embed(text: str) -> np.ndarray:
     """Embed a text string into a 384-dimensional float32 vector.
 
