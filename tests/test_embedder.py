@@ -13,6 +13,7 @@ from core.embedder import (
     cosine_similarity,
     deserialize,
     embed,
+    embed_batch,
     embedding_dim,
     serialize,
 )
@@ -32,6 +33,38 @@ def zero_vec() -> np.ndarray:
 # ---------------------------------------------------------------------------
 # embed
 # ---------------------------------------------------------------------------
+
+
+class TestEmbedBatch:
+    def test_returns_list_of_correct_length(self) -> None:
+        texts = ["hello world", "asyncpg is fast", "JWT auth"]
+        result = embed_batch(texts)
+        assert len(result) == len(texts)
+
+    def test_each_result_is_384_dim(self) -> None:
+        result = embed_batch(["a", "b"])
+        for vec in result:
+            assert vec.shape == (_EMBEDDING_DIM,)
+
+    def test_each_result_is_float32(self) -> None:
+        result = embed_batch(["a", "b"])
+        for vec in result:
+            assert vec.dtype == np.float32
+
+    def test_empty_input_returns_empty_list(self) -> None:
+        assert embed_batch([]) == []
+
+    def test_batch_matches_individual_embed(self) -> None:
+        texts = ["asyncpg is fast", "JWT authentication"]
+        batch = embed_batch(texts)
+        for text, batch_vec in zip(texts, batch, strict=True):
+            single_vec = embed(text)
+            np.testing.assert_allclose(single_vec, batch_vec, atol=1e-5)
+
+    def test_single_item_batch(self) -> None:
+        result = embed_batch(["hello"])
+        assert len(result) == 1
+        assert result[0].shape == (_EMBEDDING_DIM,)
 
 
 class TestEmbed:

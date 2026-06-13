@@ -550,3 +550,136 @@ class TestCoverageEdgeCases:
             limit=5,
         )
         assert results == []
+
+
+# ---------------------------------------------------------------------------
+# get_edges_for_nodes
+# ---------------------------------------------------------------------------
+
+
+class TestGetEdgesForNodes:
+    def test_returns_empty_dict_for_empty_input(self, graph: Graph) -> None:
+        assert graph.get_edges_for_nodes([]) == {}
+
+    def test_returns_edges_for_single_node(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        n1_id = graph.write_node(_make_node(dummy_embedding, text="n1"))
+        n2_id = graph.write_node(_make_node(dummy_embedding, text="n2"))
+        graph.write_edge(n1_id, n2_id)
+        result = graph.get_edges_for_nodes([n1_id])
+        assert n1_id in result
+        assert len(result[n1_id]) == 1
+
+    def test_batch_matches_individual_get_edges(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        ids = [graph.write_node(_make_node(dummy_embedding, text=f"n{i}")) for i in range(3)]
+        graph.write_edge(ids[0], ids[1])
+        graph.write_edge(ids[1], ids[2])
+
+        batch = graph.get_edges_for_nodes(ids)
+        for nid in ids:
+            individual = graph.get_edges(nid)
+            assert len(batch[nid]) == len(individual)
+
+    def test_node_with_no_edges_returns_empty_list(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        n_id = graph.write_node(_make_node(dummy_embedding))
+        result = graph.get_edges_for_nodes([n_id])
+        assert result[n_id] == []
+
+    def test_unknown_node_id_omitted_from_result(
+        self, graph: Graph
+    ) -> None:
+        result = graph.get_edges_for_nodes(["nonexistent-uuid"])
+        assert "nonexistent-uuid" in result
+        assert result["nonexistent-uuid"] == []
+
+
+# ---------------------------------------------------------------------------
+# write_session and touch_nodes
+# ---------------------------------------------------------------------------
+
+
+class TestWriteSession:
+    def test_write_session_inserts_row(
+        self, graph: Graph
+    ) -> None:
+        import uuid as _uuid
+        sid = str(_uuid.uuid4())
+        graph.write_session(
+            session_id=sid,
+            project=TEST_PROJECT,
+            started_at=1000,
+            ended_at=2000,
+            nodes_written=3,
+            nodes_evicted=1,
+            nodes_promoted=0,
+            transcript_path="/tmp/t.jsonl",
+        )
+        row = graph._conn.execute(
+            "SELECT * FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        assert row is not None
+        assert row["nodes_written"] == 3
+        assert row["nodes_promoted"] == 0
+
+    def test_write_session_records_promoted(self, graph: Graph) -> None:
+        import uuid as _uuid
+        sid = str(_uuid.uuid4())
+        graph.write_session(
+            session_id=sid,
+            project=TEST_PROJECT,
+            started_at=1000,
+            ended_at=2000,
+            nodes_written=0,
+            nodes_evicted=0,
+            nodes_promoted=2,
+            transcript_path="/tmp/t.jsonl",
+        )
+        row = graph._conn.execute(
+            "SELECT nodes_promoted FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        assert row["nodes_promoted"] == 2
+
+
+class TestTouchNodes:
+    def test_touch_updates_last_accessed(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        n_id = graph.write_node(_make_node(dummy_embedding))
+        import time as _t
+        _t.sleep(1)
+        now = int(_t.time())
+        graph.touch_nodes([n_id], now=now)
+        node = graph.get_node(n_id)
+        assert node is not None
+        assert node.last_accessed == now
+
+    def test_touch_bumps_weight(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        n_id = graph.write_node(_make_node(dummy_embedding))
+        node_before = graph.get_node(n_id)
+        assert node_before is not None
+        initial_weight = node_before.weight
+        graph.touch_nodes([n_id], now=int(time.time()))
+        node_after = graph.get_node(n_id)
+        assert node_after is not None
+        assert node_after.weight > initial_weight
+
+    def test_touch_empty_list_is_noop(self, graph: Graph) -> None:
+        graph.touch_nodes([], now=int(time.time()))  # must not raise
+
+    def test_touch_multiple_nodes_in_one_call(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        ids = [graph.write_node(_make_node(dummy_embedding, text=f"n{i}")) for i in range(3)]
+        now = int(time.time()) + 100
+        graph.touch_nodes(ids, now=now)
+        for nid in ids:
+            node = graph.get_node(nid)
+            assert node is not None
+            assert node.last_accessed == now
