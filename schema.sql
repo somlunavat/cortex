@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     tokens_injected INTEGER,                                   -- what was actually injected
     nodes_written   INTEGER NOT NULL DEFAULT 0,
     nodes_evicted   INTEGER NOT NULL DEFAULT 0,
+    nodes_promoted  INTEGER NOT NULL DEFAULT 0,                -- nodes promoted to a higher tier
     transcript_path TEXT                                       -- path to .cortex/sessions/<id>.jsonl
 );
 
