@@ -379,6 +379,57 @@ class Graph:
     # Weight
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Sessions
+    # ------------------------------------------------------------------
+
+    def write_session(
+        self,
+        session_id: str,
+        project: str,
+        started_at: int,
+        ended_at: int,
+        nodes_written: int,
+        nodes_evicted: int,
+        nodes_promoted: int,
+        transcript_path: str,
+    ) -> None:
+        """Insert a session record into the sessions table.
+
+        Args:
+            session_id: UUID4 for this session.
+            project: Absolute project path.
+            started_at: Unix timestamp of session start.
+            ended_at: Unix timestamp of session end.
+            nodes_written: Number of new nodes written.
+            nodes_evicted: Number of nodes evicted during decay.
+            nodes_promoted: Number of nodes promoted to a higher tier.
+            transcript_path: Path to the JSONL transcript file.
+        """
+        self._conn.execute(
+            """
+            INSERT INTO sessions (
+                id, project, started_at, ended_at,
+                nodes_written, nodes_evicted, nodes_promoted, transcript_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                project,
+                started_at,
+                ended_at,
+                nodes_written,
+                nodes_evicted,
+                nodes_promoted,
+                transcript_path,
+            ),
+        )
+        self._conn.commit()
+
+    # ------------------------------------------------------------------
+    # Weight
+    # ------------------------------------------------------------------
+
     def update_weight(self, node_id: str, delta: float) -> None:
         """Apply a weight delta to a node, flooring at 0.0.
 
@@ -395,5 +446,29 @@ class Graph:
             WHERE id = ?
             """,
             (delta, node_id),
+        )
+        self._conn.commit()
+
+    def touch_nodes(self, node_ids: list[str], now: int) -> None:
+        """Update last_accessed and bump weight for a set of nodes in one query.
+
+        Called by the inject hook to reinforce nodes that were actually
+        retrieved and surfaced to Claude, so access patterns drive weight.
+
+        Args:
+            node_ids: UUIDs of nodes that were retrieved this session.
+            now: Current unix timestamp.
+        """
+        if not node_ids:
+            return
+        placeholders = ",".join("?" * len(node_ids))
+        self._conn.execute(
+            f"""
+            UPDATE nodes
+            SET last_accessed = ?,
+                weight = weight + 0.1
+            WHERE id IN ({placeholders})
+            """,
+            [now, *node_ids],
         )
         self._conn.commit()
