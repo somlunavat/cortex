@@ -1,20 +1,22 @@
 """Cortex CLI entry point.
 
 Commands:
-    status   — node counts by tier, token savings, last session
-    graph    — ASCII adjacency summary
-    inspect  — full metadata for a single node
-    prune    — manually evict a node by id
-    reset    — wipe all nodes for a project
-    install  — write plugin.json to Claude Code plugins directory
+    status    — node counts by tier, token savings, last session
+    graph     — ASCII adjacency summary
+    inspect   — full metadata for a single node
+    prune     — manually evict a node by id
+    reset     — wipe all nodes for a project
+    search    — BM25 text search across memory nodes
+    decay     — run decay/eviction/promotion manually
+    install   — write plugin.json to Claude Code plugins directory
     dashboard — start the dashboard server on port 7000
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -23,8 +25,8 @@ from rich.table import Table
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from cli.config import SCHEMA_PATH, db_path
-from core.graph import Graph
+from cli.config import open_graph
+from core.decay import run_decay
 
 app = typer.Typer(
     name="cortex",
@@ -34,25 +36,16 @@ app = typer.Typer(
 console = Console()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _open_graph(project_root: Path) -> Graph | None:
-    """Open the cortex database for a project, or return None if not found."""
-    path = db_path(project_root)
-    if not path.exists():
-        return None
-    conn = sqlite3.connect(str(path))
-    conn.row_factory = sqlite3.Row
-    conn.executescript(SCHEMA_PATH.read_text())
-    return Graph(connection=conn)
-
-
 def _project_root() -> Path:
     """Resolve project root from CWD."""
     return Path.cwd()
+
+
+def _fmt_ts(ts: int | None) -> str:
+    """Format a unix timestamp as a human-readable local datetime string."""
+    if not ts:
+        return "—"
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ---------------------------------------------------------------------------
@@ -64,11 +57,10 @@ def _project_root() -> Path:
 def status() -> None:
     """Show node counts by tier, last session, and token savings."""
     root = _project_root()
-    graph = _open_graph(root)
+    graph = open_graph(root)
 
     if graph is None:
         console.print("[yellow]No Cortex database found in this project.[/yellow]")
-        console.print(f"  Expected: {db_path(root)}")
         raise typer.Exit(0)
 
     project = str(root)
@@ -88,25 +80,27 @@ def status() -> None:
     console.print(table)
 
     row = graph._conn.execute(
-        "SELECT ended_at, nodes_written, nodes_evicted, tokens_raw, tokens_injected "
+        "SELECT ended_at, nodes_written, nodes_evicted, nodes_promoted, "
+        "tokens_raw, tokens_injected "
         "FROM sessions WHERE project = ? ORDER BY ended_at DESC LIMIT 1",
         (project,),
     ).fetchone()
 
     if row:
-        console.print(f"\nLast session: [green]{row['ended_at']}[/green]")
-        console.print(f"  Nodes written: {row['nodes_written']}")
-        console.print(f"  Nodes evicted: {row['nodes_evicted']}")
+        console.print(f"\nLast session: [green]{_fmt_ts(row['ended_at'])}[/green]")
+        console.print(f"  Nodes written:   {row['nodes_written']}")
+        console.print(f"  Nodes evicted:   {row['nodes_evicted']}")
+        console.print(f"  Nodes promoted:  {row['nodes_promoted'] or 0}")
         if row["tokens_raw"] and row["tokens_injected"]:
             saved = row["tokens_raw"] - row["tokens_injected"]
-            console.print(f"  Tokens saved:  {saved}")
+            console.print(f"  Tokens saved:    {saved}")
 
 
 @app.command()
 def graph() -> None:
     """Print an ASCII adjacency summary of the knowledge graph."""
     root = _project_root()
-    g = _open_graph(root)
+    g = open_graph(root)
 
     if g is None:
         console.print("[yellow]No Cortex database found.[/yellow]")
@@ -145,7 +139,7 @@ def graph() -> None:
 def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> None:
     """Display full metadata for a single node."""
     root = _project_root()
-    g = _open_graph(root)
+    g = open_graph(root)
 
     if g is None:
         console.print("[yellow]No Cortex database found.[/yellow]")
@@ -171,8 +165,8 @@ def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> 
     table.add_row("scope", target.scope)
     table.add_row("source", target.source)
     table.add_row("project", target.project)
-    table.add_row("last_accessed", str(target.last_accessed))
-    table.add_row("created_at", str(target.created_at))
+    table.add_row("last_accessed", _fmt_ts(target.last_accessed))
+    table.add_row("created_at", _fmt_ts(target.created_at))
     console.print(table)
 
 
@@ -180,7 +174,7 @@ def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> 
 def prune(node_id: str = typer.Argument(..., help="Node UUID to evict")) -> None:
     """Manually evict a node from the graph."""
     root = _project_root()
-    g = _open_graph(root)
+    g = open_graph(root)
 
     if g is None:
         console.print("[yellow]No Cortex database found.[/yellow]")
@@ -205,7 +199,7 @@ def reset(
 ) -> None:
     """Wipe all nodes for a project. Irreversible."""
     root = Path(project_path) if project_path else _project_root()
-    g = _open_graph(root)
+    g = open_graph(root)
 
     if g is None:
         console.print("[yellow]No Cortex database found.[/yellow]")
@@ -222,6 +216,91 @@ def reset(
 
     deleted = g.delete_all_nodes(project)
     console.print(f"[green]Reset complete:[/green] removed {deleted} nodes for {project}")
+
+
+@app.command()
+def search(
+    query: str = typer.Argument(..., help="Text to search for in memory nodes"),
+    tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all tiers)"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to show"),
+) -> None:
+    """Search memory nodes by text using BM25 ranking."""
+    root = _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(0)
+
+    project = str(root)
+    nodes = g.get_all_nodes(project=project, tier=tier if tier else None)
+
+    if not nodes:
+        console.print("No nodes found.")
+        raise typer.Exit(0)
+
+    from rank_bm25 import BM25Okapi
+
+    tokenized = [n.text.lower().split() for n in nodes]
+    index = BM25Okapi(tokenized)
+    tokens = query.lower().split()
+    raw_scores = index.get_scores(tokens)
+
+    scored = sorted(
+        zip(raw_scores, nodes, strict=True),
+        key=lambda x: x[0],
+        reverse=True,
+    )
+
+    table = Table(title=f'Search: "{query}"')
+    table.add_column("Score", style="yellow", justify="right")
+    table.add_column("T", style="cyan", justify="center")
+    table.add_column("Type", style="dim")
+    table.add_column("Text")
+    table.add_column("ID", style="dim")
+
+    shown = 0
+    for score, node in scored:
+        if score <= 0.0:
+            break
+        if shown >= limit:
+            break
+        table.add_row(
+            f"{score:.3f}",
+            str(node.tier),
+            node.type,
+            node.text[:80],
+            node.id[:8] + "…",
+        )
+        shown += 1
+
+    if shown == 0:
+        console.print("[dim]No matching nodes.[/dim]")
+    else:
+        console.print(table)
+
+
+@app.command()
+def decay(
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+) -> None:
+    """Run weight decay, eviction, and tier promotion for this project."""
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(0)
+
+    project = str(root)
+    result = run_decay(g, project)
+
+    console.print(f"[green]Decay complete[/green] for {project}")
+    console.print(f"  Decayed:   {result.nodes_decayed}")
+    console.print(f"  Evicted:   {result.nodes_evicted}")
+    console.print(f"  Promoted:  {result.nodes_promoted}")
 
 
 @app.command()
