@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 import sys
 import time
 import uuid
@@ -12,22 +11,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from cli.config import open_graph
 from core.decay import run_decay
-from core.embedder import embed
+from core.embedder import embed_batch
 from core.extractor import run_extraction
 from core.graph import Graph, Node
-from core.parser import EventType, parse_transcript
-
-_SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
-
-
-def _open_graph(db_path: Path) -> Graph:
-    """Open (or create) the cortex SQLite database and apply schema."""
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    conn.executescript(_SCHEMA_PATH.read_text())
-    return Graph(connection=conn)
+from core.parser import EventType, detect_co_occurring_writes, parse_transcript
 
 
 def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
@@ -60,19 +49,25 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
 
     session_start = min(e.timestamp for e in events)
 
-    touched_files = [
-        Path(e.data["path"])
-        for e in events
-        if e.type == EventType.FILE_WRITE and "path" in e.data
-    ]
+    touched_files = list(
+        dict.fromkeys(
+            Path(e.data["path"])
+            for e in events
+            if e.type == EventType.FILE_WRITE and "path" in e.data
+        )
+    )
 
     candidates = run_extraction(events, project, touched_files, session_start)
+
+    embeddings = embed_batch([c.text for c in candidates])
 
     nodes_written = 0
     now = int(time.time())
 
-    for candidate in candidates:
-        embedding = embed(candidate.text)
+    # file_rel → node_id for wiring co-occurring pairs as edges
+    file_node_ids: dict[str, str] = {}
+
+    for candidate, embedding in zip(candidates, embeddings, strict=True):
         similar = graph.find_similar(embedding, project, threshold=0.9, limit=1)
 
         node = Node(
@@ -93,31 +88,51 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
         )
 
         if similar:
-            graph.merge_node(similar[0].id, node)
+            node_id = similar[0].id
+            graph.merge_node(node_id, node)
         else:
-            graph.write_node(node)
+            node_id = graph.write_node(node)
             nodes_written += 1
+
+        # Track observation nodes that are about a specific file for edge wiring
+        if candidate.source.value == "jsonl" and candidate.type.value == "observation":
+            # Text is "{rel_path} was modified N times…" — extract the leading path token
+            first_word = candidate.text.split(" ")[0]
+            if first_word:
+                file_node_ids[first_word] = node_id
+
+    # Wire co-occurring file pairs as edges between their memory nodes
+    co_pairs = detect_co_occurring_writes(events)
+    for pair in co_pairs:
+        paths = list(pair)
+        if len(paths) != 2:
+            continue
+        try:
+            rel_a = str(Path(paths[0]).relative_to(project))
+            rel_b = str(Path(paths[1]).relative_to(project))
+        except ValueError:
+            continue
+        id_a = file_node_ids.get(rel_a)
+        id_b = file_node_ids.get(rel_b)
+        if id_a and id_b and id_a != id_b:
+            try:
+                graph.write_edge(id_a, id_b)
+            except Exception:
+                pass
 
     decay_result = run_decay(graph, project)
 
-    graph._conn.execute(
-        """
-        INSERT INTO sessions (
-            id, project, started_at, ended_at,
-            nodes_written, nodes_evicted, transcript_path
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            str(uuid.uuid4()),
-            project,
-            session_start,
-            now,
-            nodes_written,
-            decay_result.nodes_evicted,
-            str(transcript_path),
-        ),
+    graph.write_session(
+        session_id=str(uuid.uuid4()),
+        project=project,
+        started_at=session_start,
+        ended_at=now,
+        nodes_written=nodes_written,
+        nodes_evicted=decay_result.nodes_evicted,
+        nodes_promoted=decay_result.nodes_promoted,
+        transcript_path=str(transcript_path),
     )
-    graph._conn.commit()
+
     return nodes_written
 
 
@@ -139,15 +154,12 @@ def main() -> int:
         return 0
 
     project = os.environ.get("CLAUDE_PROJECT_PATH", str(Path.cwd()))
-    db_path = Path(
-        os.environ.get(
-            "CORTEX_DB_PATH",
-            str(Path(project) / ".cortex" / "cortex.db"),
-        )
-    )
 
     try:
-        graph = _open_graph(db_path)
+        graph = open_graph(Path(project), create=True)
+        if graph is None:
+            print("CORTEX: could not open graph", file=sys.stderr)
+            return 1
         n = run_extract(transcript_path, project, graph)
         print(f"CORTEX: extracted {n} nodes", file=sys.stderr)
         return 0

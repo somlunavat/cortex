@@ -4,37 +4,22 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from cli.config import open_graph
 from core.graph import Graph
-from core.retrieval import format_injection_block, retrieve
-
-_SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
-
-
-def _open_graph(db_path: Path) -> Graph | None:
-    """Open an existing cortex database, or return None if not yet created.
-
-    Args:
-        db_path: Path to cortex.db.
-
-    Returns:
-        Open Graph instance, or None if the database file does not exist.
-    """
-    if not db_path.exists():
-        return None
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    conn.executescript(_SCHEMA_PATH.read_text())
-    return Graph(connection=conn)
+from core.retrieval import TOKEN_BUDGET, format_injection_block, retrieve
 
 
 def run_inject(project: str, graph: Graph, query: str = "") -> str:
     """Retrieve relevant nodes and return the formatted injection block.
+
+    Nodes that are surfaced get their last_accessed timestamp and weight
+    updated so retrieval frequency drives the memory weight signal.
 
     Args:
         project: Absolute project path used to scope retrieval.
@@ -48,7 +33,10 @@ def run_inject(project: str, graph: Graph, query: str = "") -> str:
     nodes = retrieve(query, project, graph)
     if not nodes:
         return ""
-    return format_injection_block(nodes, project)
+
+    graph.touch_nodes([n.id for n in nodes], now=int(time.time()))
+
+    return format_injection_block(nodes, project, budget_tokens=TOKEN_BUDGET)
 
 
 def main() -> int:
@@ -61,14 +49,8 @@ def main() -> int:
     Prints the injection block to stdout if there are nodes to inject.
     """
     project = os.environ.get("CLAUDE_PROJECT_PATH", str(Path.cwd()))
-    db_path = Path(
-        os.environ.get(
-            "CORTEX_DB_PATH",
-            str(Path(project) / ".cortex" / "cortex.db"),
-        )
-    )
 
-    graph = _open_graph(db_path)
+    graph = open_graph(Path(project))
     if graph is None:
         return 0
 
