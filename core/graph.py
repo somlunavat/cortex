@@ -152,8 +152,11 @@ class Graph:
         - weight += 0.5
         - last_accessed = now()
         - session_count += 1
-        - text: keep existing unless new text is shorter
+        - text: keep existing unless candidate text is strictly shorter
         - rationale: keep existing if non-null; fill from candidate if null
+        - embedding: update to candidate embedding when candidate text wins
+          (the new text represents the latest phrasing, so the embedding
+          should match it rather than the superseded phrasing)
 
         Args:
             existing_id: The UUID of the node already in the graph.
@@ -161,37 +164,56 @@ class Graph:
         """
         now = int(time.time())
         row = self._conn.execute(
-            "SELECT text, rationale FROM nodes WHERE id = ?", (existing_id,)
+            "SELECT text, rationale, precision_bits FROM nodes WHERE id = ?",
+            (existing_id,),
         ).fetchone()
         if row is None:
             return
 
         existing_text: str = row["text"]
         existing_rationale: str | None = row["rationale"]
+        existing_precision: int = row["precision_bits"]
 
-        new_text = (
-            candidate.text
-            if len(candidate.text) < len(existing_text)
-            else existing_text
-        )
+        candidate_wins = len(candidate.text) < len(existing_text)
+        new_text = candidate.text if candidate_wins else existing_text
         new_rationale = (
             existing_rationale
             if existing_rationale is not None
             else candidate.rationale
         )
 
-        self._conn.execute(
-            """
-            UPDATE nodes
-            SET weight = weight + 0.5,
-                last_accessed = ?,
-                session_count = session_count + 1,
-                text = ?,
-                rationale = ?
-            WHERE id = ?
-            """,
-            (now, new_text, new_rationale, existing_id),
-        )
+        # Refresh the embedding when the candidate text is adopted
+        new_embedding_blob: bytes | None = None
+        if candidate_wins and candidate.embedding is not None:
+            new_embedding_blob = serialize(candidate.embedding, existing_precision)
+
+        if new_embedding_blob is not None:
+            self._conn.execute(
+                """
+                UPDATE nodes
+                SET weight = weight + 0.5,
+                    last_accessed = ?,
+                    session_count = session_count + 1,
+                    text = ?,
+                    rationale = ?,
+                    embedding = ?
+                WHERE id = ?
+                """,
+                (now, new_text, new_rationale, new_embedding_blob, existing_id),
+            )
+        else:
+            self._conn.execute(
+                """
+                UPDATE nodes
+                SET weight = weight + 0.5,
+                    last_accessed = ?,
+                    session_count = session_count + 1,
+                    text = ?,
+                    rationale = ?
+                WHERE id = ?
+                """,
+                (now, new_text, new_rationale, existing_id),
+            )
         self._conn.commit()
 
     def find_similar(
