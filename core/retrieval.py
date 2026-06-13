@@ -191,7 +191,7 @@ def fuse_scores(
 
 
 @lru_cache(maxsize=1)
-def _get_tokenizer() -> object:
+def _get_tokenizer() -> "tiktoken.Encoding":
     """Lazy-load the cl100k_base tiktoken encoder (cached after first call)."""
     import tiktoken
 
@@ -200,11 +200,7 @@ def _get_tokenizer() -> object:
 
 def _count_tokens(text: str) -> int:
     """Count cl100k_base tokens in a string."""
-    import tiktoken
-
-    enc = _get_tokenizer()
-    assert isinstance(enc, tiktoken.Encoding)
-    return len(enc.encode(text))
+    return len(_get_tokenizer().encode(text))
 
 
 def _enforce_budget(
@@ -295,15 +291,21 @@ def retrieve(
     return _enforce_budget(tier3, top_fused, budget_tokens)
 
 
-def format_injection_block(nodes: list[Node], project: str) -> str:
+def format_injection_block(
+    nodes: list[Node],
+    project: str,
+    budget_tokens: int = TOKEN_BUDGET,
+) -> str:
     """Format retrieved nodes as the Cortex injection block.
 
     Tier-3 nodes appear in a [CONVENTIONS] section; all others in [RELEVANT CONTEXT].
-    The footer includes the total token count for observability.
+    The footer includes the actual token count and the active budget ceiling.
 
     Args:
         nodes: Nodes to format (typically the output of retrieve()).
         project: Absolute project path shown in the header.
+        budget_tokens: Token ceiling used during retrieval; shown in the footer
+            so callers can verify how close to the limit the block is.
 
     Returns:
         A human-readable multi-line string ready for stdout injection.
@@ -328,6 +330,6 @@ def format_injection_block(nodes: list[Node], project: str) -> str:
     body = "\n".join(lines)
     token_count = _count_tokens(body)
     footer = (
-        f"\n=== END CORTEX MEMORY (tokens: {token_count} / budget: {TOKEN_BUDGET}) ==="
+        f"\n=== END CORTEX MEMORY (tokens: {token_count} / budget: {budget_tokens}) ==="
     )
     return body + footer
