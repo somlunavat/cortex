@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 import time
@@ -115,10 +116,8 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
         id_a = file_node_ids.get(rel_a)
         id_b = file_node_ids.get(rel_b)
         if id_a and id_b and id_a != id_b:
-            try:
+            with contextlib.suppress(Exception):
                 graph.write_edge(id_a, id_b)
-            except Exception:
-                pass
 
     decay_result = run_decay(graph, project)
 
