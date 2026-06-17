@@ -215,7 +215,9 @@ def reset(
         )
 
     deleted = g.delete_all_nodes(project)
-    console.print(f"[green]Reset complete:[/green] removed {deleted} nodes for {project}")
+    console.print(
+        f"[green]Reset complete:[/green] removed {deleted} nodes for {project}"
+    )
 
 
 @app.command()

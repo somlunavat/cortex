@@ -574,7 +574,10 @@ class TestGetEdgesForNodes:
     def test_batch_matches_individual_get_edges(
         self, graph: Graph, dummy_embedding: np.ndarray
     ) -> None:
-        ids = [graph.write_node(_make_node(dummy_embedding, text=f"n{i}")) for i in range(3)]
+        ids = [
+            graph.write_node(_make_node(dummy_embedding, text=f"n{i}"))
+            for i in range(3)
+        ]
         graph.write_edge(ids[0], ids[1])
         graph.write_edge(ids[1], ids[2])
 
@@ -590,9 +593,7 @@ class TestGetEdgesForNodes:
         result = graph.get_edges_for_nodes([n_id])
         assert result[n_id] == []
 
-    def test_unknown_node_id_omitted_from_result(
-        self, graph: Graph
-    ) -> None:
+    def test_unknown_node_id_omitted_from_result(self, graph: Graph) -> None:
         result = graph.get_edges_for_nodes(["nonexistent-uuid"])
         assert "nonexistent-uuid" in result
         assert result["nonexistent-uuid"] == []
@@ -604,10 +605,9 @@ class TestGetEdgesForNodes:
 
 
 class TestWriteSession:
-    def test_write_session_inserts_row(
-        self, graph: Graph
-    ) -> None:
+    def test_write_session_inserts_row(self, graph: Graph) -> None:
         import uuid as _uuid
+
         sid = str(_uuid.uuid4())
         graph.write_session(
             session_id=sid,
@@ -628,6 +628,7 @@ class TestWriteSession:
 
     def test_write_session_records_promoted(self, graph: Graph) -> None:
         import uuid as _uuid
+
         sid = str(_uuid.uuid4())
         graph.write_session(
             session_id=sid,
@@ -651,6 +652,7 @@ class TestTouchNodes:
     ) -> None:
         n_id = graph.write_node(_make_node(dummy_embedding))
         import time as _t
+
         _t.sleep(1)
         now = int(_t.time())
         graph.touch_nodes([n_id], now=now)
@@ -676,7 +678,10 @@ class TestTouchNodes:
     def test_touch_multiple_nodes_in_one_call(
         self, graph: Graph, dummy_embedding: np.ndarray
     ) -> None:
-        ids = [graph.write_node(_make_node(dummy_embedding, text=f"n{i}")) for i in range(3)]
+        ids = [
+            graph.write_node(_make_node(dummy_embedding, text=f"n{i}"))
+            for i in range(3)
+        ]
         now = int(time.time()) + 100
         graph.touch_nodes(ids, now=now)
         for nid in ids:

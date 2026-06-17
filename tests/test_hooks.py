@@ -229,15 +229,14 @@ class TestRunInject:
         self, graph: Graph, rng: np.random.Generator
     ) -> None:
         e = rng.random(384).astype(np.float32)
-        node_id = graph.write_node(
-            _make_node("convention node", tier=3, embedding=e)
-        )
+        node_id = graph.write_node(_make_node("convention node", tier=3, embedding=e))
         before = graph.get_node(node_id)
         assert before is not None
         before_ts = before.last_accessed
 
         # Small sleep to ensure timestamp advances
         import time as _time
+
         _time.sleep(1)
 
         run_inject(TEST_PROJECT, graph, query="")

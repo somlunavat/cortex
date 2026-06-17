@@ -313,9 +313,7 @@ class Graph:
         Returns:
             Number of nodes deleted.
         """
-        cursor = self._conn.execute(
-            "DELETE FROM nodes WHERE project = ?", (project,)
-        )
+        cursor = self._conn.execute("DELETE FROM nodes WHERE project = ?", (project,))
         self._conn.commit()
         return cursor.rowcount
 
