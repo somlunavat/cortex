@@ -5,6 +5,10 @@ from __future__ import annotations
 import os
 import sqlite3
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.graph import Graph
 
 # ---------------------------------------------------------------------------
 # Decay constants — single source of truth (mirrors core/decay.py)
@@ -63,7 +67,7 @@ def sessions_dir(project_root: Path) -> Path:
     return cortex_dir(project_root) / SESSIONS_DIR_NAME
 
 
-def open_graph(project_root: Path, *, create: bool = False) -> "Graph | None":
+def open_graph(project_root: Path, *, create: bool = False) -> Graph | None:
     """Open (or optionally create) the Cortex SQLite database for a project.
 
     Args:

@@ -14,9 +14,13 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 import numpy as np
 from rank_bm25 import BM25Okapi
+
+if TYPE_CHECKING:
+    import tiktoken
 
 from core.embedder import cosine_similarity, embed
 from core.graph import Graph, Node
@@ -191,7 +195,7 @@ def fuse_scores(
 
 
 @lru_cache(maxsize=1)
-def _get_tokenizer() -> "tiktoken.Encoding":
+def _get_tokenizer() -> tiktoken.Encoding:
     """Lazy-load the cl100k_base tiktoken encoder (cached after first call)."""
     import tiktoken
 
