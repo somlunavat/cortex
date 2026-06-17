@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -27,23 +26,8 @@ TEST_PROJECT = "/tmp/cortex_test_project"
 
 
 @pytest.fixture
-def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    schema = Path("schema.sql").read_text()
-    conn.executescript(schema)
-    return conn
-
-
-@pytest.fixture
 def graph(db: sqlite3.Connection) -> Graph:
     return Graph(connection=db)
-
-
-@pytest.fixture
-def dummy_embedding() -> np.ndarray:
-    rng = np.random.default_rng(seed=42)
-    return rng.random(384).astype(np.float32)
 
 
 def _make_node(
