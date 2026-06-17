@@ -11,30 +11,6 @@ if TYPE_CHECKING:
     from core.graph import Graph
 
 # ---------------------------------------------------------------------------
-# Decay constants — single source of truth (mirrors core/decay.py)
-# ---------------------------------------------------------------------------
-
-TIER1_DECAY_RATE: float = 0.85
-TIER2_DECAY_RATE: float = 0.95
-
-TIER1_EVICTION_THRESHOLD: float = 0.3
-TIER2_EVICTION_THRESHOLD: float = 0.5
-
-TIER1_PROMOTION_WEIGHT: float = 8.0
-TIER1_PROMOTION_SESSIONS: int = 3
-
-TIER2_PROMOTION_WEIGHT: float = 20.0
-TIER2_PROMOTION_SESSIONS: int = 8
-TIER2_PROMOTION_AGE_DAYS: int = 14
-
-# ---------------------------------------------------------------------------
-# Retrieval constants
-# ---------------------------------------------------------------------------
-
-TOKEN_BUDGET: int = 600
-TOP_K: int = 8
-
-# ---------------------------------------------------------------------------
 # Filesystem paths
 # ---------------------------------------------------------------------------
 
