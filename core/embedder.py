@@ -66,8 +66,8 @@ def embed_batch(texts: list[str]) -> list[np.ndarray]:
         for r in results:
             arr = np.asarray(r, dtype=np.float32)
             if arr.ndim > 1:
-                arr = arr.squeeze()
-            out.append(arr.astype(np.float32))
+                arr = arr.squeeze().astype(np.float32)
+            out.append(arr)
         return out
     except Exception as exc:
         logger.warning("Batch embedding failed: %s; using zero vectors", exc)
@@ -96,8 +96,8 @@ def embed(text: str) -> np.ndarray:
         result = model.encode(text, convert_to_numpy=True)
         arr = np.asarray(result, dtype=np.float32)
         if arr.ndim > 1:
-            arr = arr.squeeze()
-        return arr.astype(np.float32)
+            return arr.squeeze().astype(np.float32)
+        return arr
     except Exception as exc:
         logger.warning("Embedding failed for text %r: %s", text[:40], exc)
         return np.zeros(_EMBEDDING_DIM, dtype=np.float32)
