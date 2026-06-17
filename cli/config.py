@@ -101,8 +101,7 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
     is safe to call on every database open.
     """
     existing_cols = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+        row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
     }
     if "nodes_promoted" not in existing_cols:
         conn.execute(
