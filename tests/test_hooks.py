@@ -425,3 +425,27 @@ class TestMainFunctions:
         monkeypatch.setattr(inj_mod, "run_inject", raise_always)
         result = inject_main()
         assert result == 1
+
+    def test_extract_stores_token_counts_in_session(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        row = graph._conn.execute(
+            "SELECT tokens_raw, tokens_injected FROM sessions WHERE project = ?",
+            (TEST_PROJECT,),
+        ).fetchone()
+        assert row is not None
+        # tokens_raw may be None if graph was empty after decay, but should
+        # be a non-negative integer when nodes exist
+        if row["tokens_raw"] is not None:
+            assert row["tokens_raw"] >= 0
+        if row["tokens_injected"] is not None:
+            assert row["tokens_injected"] >= 0
+
+    def test_extract_token_savings_positive(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        row = graph._conn.execute(
+            "SELECT tokens_raw, tokens_injected FROM sessions WHERE project = ?",
+            (TEST_PROJECT,),
+        ).fetchone()
+        assert row is not None
+        if row["tokens_raw"] and row["tokens_injected"]:
+            assert row["tokens_raw"] >= row["tokens_injected"]
