@@ -462,6 +462,8 @@ class Graph:
         nodes_evicted: int,
         nodes_promoted: int,
         transcript_path: str,
+        tokens_raw: int | None = None,
+        tokens_injected: int | None = None,
     ) -> None:
         """Insert a session record into the sessions table.
 
@@ -474,13 +476,16 @@ class Graph:
             nodes_evicted: Number of nodes evicted during decay.
             nodes_promoted: Number of nodes promoted to a higher tier.
             transcript_path: Path to the JSONL transcript file.
+            tokens_raw: Total tokens across all project node texts (no budget).
+            tokens_injected: Tokens in the budget-constrained injection block.
         """
         self._conn.execute(
             """
             INSERT INTO sessions (
                 id, project, started_at, ended_at,
-                nodes_written, nodes_evicted, nodes_promoted, transcript_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                nodes_written, nodes_evicted, nodes_promoted, transcript_path,
+                tokens_raw, tokens_injected
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 session_id,
@@ -491,6 +496,8 @@ class Graph:
                 nodes_evicted,
                 nodes_promoted,
                 transcript_path,
+                tokens_raw,
+                tokens_injected,
             ),
         )
         self._conn.commit()

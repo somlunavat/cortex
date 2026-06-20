@@ -207,6 +207,18 @@ def _count_tokens(text: str) -> int:
     return len(_get_tokenizer().encode(text))
 
 
+def count_tokens(text: str) -> int:
+    """Count cl100k_base tokens in a string (public API).
+
+    Args:
+        text: Input string to tokenize.
+
+    Returns:
+        Number of cl100k_base tokens.
+    """
+    return _count_tokens(text)
+
+
 def _enforce_budget(
     tier3: list[Node],
     fused_candidates: list[ScoredNode],

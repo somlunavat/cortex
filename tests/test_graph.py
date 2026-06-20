@@ -629,6 +629,50 @@ class TestWriteSession:
         ).fetchone()
         assert row["nodes_promoted"] == 2
 
+    def test_write_session_stores_token_counts(self, graph: Graph) -> None:
+        import uuid as _uuid
+
+        sid = str(_uuid.uuid4())
+        graph.write_session(
+            session_id=sid,
+            project=TEST_PROJECT,
+            started_at=1000,
+            ended_at=2000,
+            nodes_written=5,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="/tmp/t.jsonl",
+            tokens_raw=1200,
+            tokens_injected=420,
+        )
+        row = graph._conn.execute(
+            "SELECT tokens_raw, tokens_injected FROM sessions WHERE id = ?",
+            (sid,),
+        ).fetchone()
+        assert row["tokens_raw"] == 1200
+        assert row["tokens_injected"] == 420
+
+    def test_write_session_token_counts_nullable(self, graph: Graph) -> None:
+        import uuid as _uuid
+
+        sid = str(_uuid.uuid4())
+        graph.write_session(
+            session_id=sid,
+            project=TEST_PROJECT,
+            started_at=1000,
+            ended_at=2000,
+            nodes_written=0,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="/tmp/t.jsonl",
+        )
+        row = graph._conn.execute(
+            "SELECT tokens_raw, tokens_injected FROM sessions WHERE id = ?",
+            (sid,),
+        ).fetchone()
+        assert row["tokens_raw"] is None
+        assert row["tokens_injected"] is None
+
 
 class TestTouchNodes:
     def test_touch_updates_last_accessed(
