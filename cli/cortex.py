@@ -306,6 +306,94 @@ def decay(
 
 
 @app.command()
+def export(
+    output: str = typer.Option(
+        "", "--out", "-o", help="Output file path (default: stdout)"
+    ),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+    tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all tiers)"),
+    fmt: str = typer.Option("json", "--format", "-f", help="Output format: json or csv"),
+) -> None:
+    """Export memory nodes to JSON or CSV for backup or inspection."""
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(0)
+
+    project = str(root)
+    nodes = g.get_all_nodes(project=project, tier=tier if tier else None)
+
+    if not nodes:
+        console.print("[dim]No nodes to export.[/dim]")
+        raise typer.Exit(0)
+
+    if fmt == "csv":
+        import csv
+        import io
+
+        buf = io.StringIO()
+        writer = csv.DictWriter(
+            buf,
+            fieldnames=[
+                "id", "type", "tier", "text", "rationale", "weight",
+                "session_count", "precision_bits", "scope", "source",
+                "last_accessed", "created_at",
+            ],
+        )
+        writer.writeheader()
+        for node in nodes:
+            writer.writerow(
+                {
+                    "id": node.id,
+                    "type": node.type,
+                    "tier": node.tier,
+                    "text": node.text,
+                    "rationale": node.rationale or "",
+                    "weight": f"{node.weight:.6f}",
+                    "session_count": node.session_count,
+                    "precision_bits": node.precision_bits,
+                    "scope": node.scope,
+                    "source": node.source,
+                    "last_accessed": node.last_accessed,
+                    "created_at": node.created_at,
+                }
+            )
+        content = buf.getvalue()
+    else:
+        rows = [
+            {
+                "id": node.id,
+                "type": node.type,
+                "tier": node.tier,
+                "text": node.text,
+                "rationale": node.rationale,
+                "weight": node.weight,
+                "session_count": node.session_count,
+                "precision_bits": node.precision_bits,
+                "scope": node.scope,
+                "source": node.source,
+                "project": node.project,
+                "last_accessed": node.last_accessed,
+                "created_at": node.created_at,
+            }
+            for node in nodes
+        ]
+        content = json.dumps(rows, indent=2)
+
+    if output:
+        Path(output).write_text(content)
+        console.print(
+            f"[green]Exported {len(nodes)} nodes to:[/green] {output}"
+        )
+    else:
+        print(content)
+
+
+@app.command()
 def install() -> None:
     """Write plugin.json to the Claude Code plugins directory."""
     plugins_dir = Path.home() / ".claude" / "plugins"
