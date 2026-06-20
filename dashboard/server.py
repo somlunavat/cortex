@@ -151,7 +151,7 @@ def api_sessions(project: str = "", limit: int = 50) -> list[dict[str, Any]]:
 
     rows = conn.execute(
         "SELECT id, project, started_at, ended_at, nodes_written, nodes_evicted, "
-        "tokens_raw, tokens_injected FROM sessions WHERE project = ? "
+        "nodes_promoted, tokens_raw, tokens_injected FROM sessions WHERE project = ? "
         "ORDER BY ended_at DESC LIMIT ?",
         (str(root), limit),
     ).fetchall()
