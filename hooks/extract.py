@@ -145,9 +145,10 @@ def _compute_token_stats(
 ) -> tuple[int | None, int | None]:
     """Compute token savings metrics for the session record.
 
-    tokens_raw = total tokens across all project node texts (sum without budget).
+    tokens_raw = tokens in a full injection block containing ALL project nodes
+        with no budget constraint. Represents the cost without Cortex's filtering.
     tokens_injected = tokens in the budget-constrained injection block that would
-        be produced at the next session start.
+        be produced at the next session start. Always <= tokens_raw.
 
     Both values are approximate forward-looking estimates. Either can be None if
     computation fails (e.g., empty graph, tiktoken unavailable).
@@ -163,12 +164,17 @@ def _compute_token_stats(
         all_nodes = graph.get_all_nodes(project=project)
         if not all_nodes:
             return None, None
-        tokens_raw: int = sum(count_tokens(n.text) for n in all_nodes)
+        # Raw: format all nodes with a very large budget (no trimming)
+        raw_block = format_injection_block(all_nodes, project, budget_tokens=999_999)
+        tokens_raw: int = count_tokens(raw_block)
+        # Injected: format the budget-constrained subset
         projected = retrieve("", project, graph, budget_tokens=TOKEN_BUDGET)
         if not projected:
             return tokens_raw, None
-        block = format_injection_block(projected, project, budget_tokens=TOKEN_BUDGET)
-        tokens_injected: int = count_tokens(block)
+        injected_block = format_injection_block(
+            projected, project, budget_tokens=TOKEN_BUDGET
+        )
+        tokens_injected: int = count_tokens(injected_block)
         return tokens_raw, tokens_injected
     except Exception:
         return None, None
