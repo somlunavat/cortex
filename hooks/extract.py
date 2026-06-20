@@ -18,6 +18,7 @@ from core.embedder import embed_batch
 from core.extractor import run_extraction
 from core.graph import Graph, Node
 from core.parser import EventType, detect_co_occurring_writes, parse_transcript
+from core.retrieval import TOKEN_BUDGET, count_tokens, format_injection_block, retrieve
 
 
 def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
@@ -121,6 +122,8 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
 
     decay_result = run_decay(graph, project)
 
+    tokens_raw, tokens_injected = _compute_token_stats(graph, project)
+
     graph.write_session(
         session_id=str(uuid.uuid4()),
         project=project,
@@ -130,9 +133,45 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
         nodes_evicted=decay_result.nodes_evicted,
         nodes_promoted=decay_result.nodes_promoted,
         transcript_path=str(transcript_path),
+        tokens_raw=tokens_raw,
+        tokens_injected=tokens_injected,
     )
 
     return nodes_written
+
+
+def _compute_token_stats(
+    graph: Graph, project: str
+) -> tuple[int | None, int | None]:
+    """Compute token savings metrics for the session record.
+
+    tokens_raw = total tokens across all project node texts (sum without budget).
+    tokens_injected = tokens in the budget-constrained injection block that would
+        be produced at the next session start.
+
+    Both values are approximate forward-looking estimates. Either can be None if
+    computation fails (e.g., empty graph, tiktoken unavailable).
+
+    Args:
+        graph: Open Graph instance for the project.
+        project: Absolute project path.
+
+    Returns:
+        Tuple of (tokens_raw, tokens_injected), each an int or None.
+    """
+    try:
+        all_nodes = graph.get_all_nodes(project=project)
+        if not all_nodes:
+            return None, None
+        tokens_raw: int = sum(count_tokens(n.text) for n in all_nodes)
+        projected = retrieve("", project, graph, budget_tokens=TOKEN_BUDGET)
+        if not projected:
+            return tokens_raw, None
+        block = format_injection_block(projected, project, budget_tokens=TOKEN_BUDGET)
+        tokens_injected: int = count_tokens(block)
+        return tokens_raw, tokens_injected
+    except Exception:
+        return None, None
 
 
 def main() -> int:
