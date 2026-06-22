@@ -510,6 +510,118 @@ def stats(
 
 
 @app.command()
+def import_(
+    input_file: str = typer.Argument(..., help="Path to JSON file from cortex export"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+    skip_duplicates: bool = typer.Option(
+        True, "--skip-duplicates/--allow-duplicates",
+        help="Skip nodes whose text already exists in the graph (default: skip)",
+    ),
+) -> None:
+    """Import memory nodes from a cortex export JSON file.
+
+    Reads the JSON produced by 'cortex export' and writes each node into the
+    graph. Embeddings are recomputed from node text since the export format
+    omits binary blobs. Nodes whose text is already present are skipped by
+    default to avoid duplicates.
+    """
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root, create=True)
+
+    if g is None:
+        console.print("[red]Could not open or create Cortex database.[/red]")
+        raise typer.Exit(1)
+
+    src = Path(input_file)
+    if not src.exists():
+        console.print(f"[red]File not found:[/red] {src}")
+        raise typer.Exit(1)
+
+    try:
+        raw = src.read_text(encoding="utf-8")
+        records: list[dict] = json.loads(raw)
+    except (json.JSONDecodeError, ValueError) as exc:
+        console.print(f"[red]Invalid JSON:[/red] {exc}")
+        raise typer.Exit(1)
+
+    if not isinstance(records, list):
+        console.print("[red]Expected a JSON array at the top level.[/red]")
+        raise typer.Exit(1)
+
+    project = str(root)
+    existing_texts: set[str] = set()
+    if skip_duplicates:
+        nodes = g.get_all_nodes(project=project)
+        existing_texts = {n.text for n in nodes}
+
+    from core.embedder import embed
+    from core.graph import Node
+    import time as _time
+
+    imported = 0
+    skipped = 0
+    now = int(_time.time())
+
+    for rec in records:
+        if not isinstance(rec, dict):
+            skipped += 1
+            continue
+
+        text = str(rec.get("text", "")).strip()
+        if not text:
+            skipped += 1
+            continue
+
+        if skip_duplicates and text in existing_texts:
+            skipped += 1
+            continue
+
+        tier = int(rec.get("tier", 1))
+        if tier not in (1, 2, 3):
+            tier = 1
+
+        node_type = str(rec.get("type", "observation"))
+        if node_type not in ("observation", "fact", "convention", "error"):
+            node_type = "observation"
+
+        scope = str(rec.get("scope", "project"))
+        if scope not in ("project", "module", "session"):
+            scope = "project"
+
+        source = str(rec.get("source", "jsonl"))
+        if source not in ("jsonl", "ast", "git", "nlp"):
+            source = "jsonl"
+
+        embedding = embed(text)
+        node = Node(
+            id="",
+            type=node_type,
+            tier=tier,
+            text=text,
+            rationale=rec.get("rationale"),
+            embedding=embedding,
+            precision_bits=32,
+            weight=float(rec.get("weight", 1.0)),
+            project=project,
+            scope=scope,
+            source=source,
+            last_accessed=now,
+            created_at=now,
+            session_count=int(rec.get("session_count", 1)),
+        )
+        g.write_node(node)
+        existing_texts.add(text)
+        imported += 1
+
+    console.print(
+        f"[green]Imported {imported} nodes[/green] "
+        f"({skipped} skipped) into {project}"
+    )
+
+
+@app.command()
 def install() -> None:
     """Write plugin.json to the Claude Code plugins directory."""
     plugins_dir = Path.home() / ".claude" / "plugins"
