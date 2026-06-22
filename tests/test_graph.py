@@ -716,3 +716,26 @@ class TestTouchNodes:
             node = graph.get_node(nid)
             assert node is not None
             assert node.last_accessed == now
+
+    def test_touch_increments_session_count(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        n_id = graph.write_node(_make_node(dummy_embedding, text="session count test"))
+        node_before = graph.get_node(n_id)
+        assert node_before is not None
+        initial_count = node_before.session_count
+        graph.touch_nodes([n_id], now=int(time.time()))
+        node_after = graph.get_node(n_id)
+        assert node_after is not None
+        assert node_after.session_count == initial_count + 1
+
+    def test_touch_session_count_cumulative(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        """Multiple touch calls (simulating multiple sessions) accumulate correctly."""
+        n_id = graph.write_node(_make_node(dummy_embedding, text="cumulative count"))
+        for i in range(4):
+            graph.touch_nodes([n_id], now=int(time.time()) + i)
+        node = graph.get_node(n_id)
+        assert node is not None
+        assert node.session_count == 1 + 4  # initial 1 + 4 touches

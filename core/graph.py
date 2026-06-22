@@ -526,10 +526,13 @@ class Graph:
         self._conn.commit()
 
     def touch_nodes(self, node_ids: list[str], now: int) -> None:
-        """Update last_accessed and bump weight for a set of nodes in one query.
+        """Update last_accessed, bump weight, and increment session_count.
 
         Called by the inject hook to reinforce nodes that were actually
-        retrieved and surfaced to Claude, so access patterns drive weight.
+        retrieved and surfaced to Claude. session_count must be incremented
+        here so tier-promotion thresholds (which check session_count) reflect
+        how many distinct sessions have seen each node, not just how many
+        sessions produced it via extraction.
 
         Args:
             node_ids: UUIDs of nodes that were retrieved this session.
@@ -542,7 +545,8 @@ class Graph:
             f"""
             UPDATE nodes
             SET last_accessed = ?,
-                weight = weight + 0.1
+                weight = weight + 0.1,
+                session_count = session_count + 1
             WHERE id IN ({placeholders})
             """,
             [now, *node_ids],
