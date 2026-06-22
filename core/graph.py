@@ -296,6 +296,35 @@ class Graph:
             ).fetchall()
         return [_row_to_node(row) for row in rows]
 
+    def get_nodes_by_source(
+        self, project: str, source: str, tier: int | None = None
+    ) -> list[Node]:
+        """Return nodes filtered by extraction source channel.
+
+        Uses the idx_nodes_project_source composite index for efficiency.
+
+        Args:
+            project: Absolute project path.
+            source: Extraction source: 'jsonl', 'ast', 'git', or 'nlp'.
+            tier: Optional tier filter; None returns all tiers.
+
+        Returns:
+            List of Node objects, ordered by weight DESC.
+        """
+        if tier is not None:
+            rows = self._conn.execute(
+                "SELECT * FROM nodes WHERE project = ? AND source = ? AND tier = ? "
+                "ORDER BY weight DESC",
+                (project, source, tier),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM nodes WHERE project = ? AND source = ? "
+                "ORDER BY weight DESC",
+                (project, source),
+            ).fetchall()
+        return [_row_to_node(row) for row in rows]
+
     def delete_node(self, node_id: str) -> None:
         """Delete a node and all its edges (CASCADE).
 
