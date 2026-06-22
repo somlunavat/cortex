@@ -394,6 +394,122 @@ def export(
 
 
 @app.command()
+def sessions(
+    limit: int = typer.Option(20, "--limit", "-n", help="Number of sessions to show"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+) -> None:
+    """List recent extraction sessions with node and token stats."""
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(0)
+
+    rows = g._conn.execute(
+        """
+        SELECT id, started_at, ended_at, nodes_written, nodes_evicted,
+               nodes_promoted, tokens_raw, tokens_injected, transcript_path
+        FROM sessions
+        WHERE project = ?
+        ORDER BY ended_at DESC
+        LIMIT ?
+        """,
+        (str(root), limit),
+    ).fetchall()
+
+    if not rows:
+        console.print("[dim]No sessions recorded for this project.[/dim]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Sessions — {str(root)}")
+    table.add_column("Ended", style="cyan", no_wrap=True)
+    table.add_column("Written", justify="right")
+    table.add_column("Evicted", justify="right")
+    table.add_column("Promoted", justify="right")
+    table.add_column("Tokens saved", justify="right")
+    table.add_column("ID", style="dim")
+
+    for row in rows:
+        saved = ""
+        if row["tokens_raw"] is not None and row["tokens_injected"] is not None:
+            saved = str(row["tokens_raw"] - row["tokens_injected"])
+        table.add_row(
+            _fmt_ts(row["ended_at"]),
+            str(row["nodes_written"] or 0),
+            str(row["nodes_evicted"] or 0),
+            str(row["nodes_promoted"] or 0),
+            saved or "—",
+            row["id"][:8] + "…",
+        )
+
+    console.print(table)
+
+
+@app.command()
+def stats(
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+) -> None:
+    """Show aggregate memory statistics across all sessions."""
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(0)
+
+    project = str(root)
+
+    agg = g._conn.execute(
+        """
+        SELECT
+            COUNT(*)              AS session_count,
+            SUM(nodes_written)    AS total_written,
+            SUM(nodes_evicted)    AS total_evicted,
+            SUM(nodes_promoted)   AS total_promoted,
+            SUM(CASE WHEN tokens_raw IS NOT NULL AND tokens_injected IS NOT NULL
+                     THEN tokens_raw - tokens_injected ELSE 0 END) AS total_saved,
+            MIN(started_at)       AS first_session,
+            MAX(ended_at)         AS last_session
+        FROM sessions
+        WHERE project = ?
+        """,
+        (project,),
+    ).fetchone()
+
+    tier_counts = dict(
+        g._conn.execute(
+            "SELECT tier, COUNT(*) FROM nodes WHERE project = ? GROUP BY tier",
+            (project,),
+        ).fetchall()
+    )
+
+    node_total = sum(tier_counts.values())
+
+    table = Table(title=f"Aggregate stats — {project}")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", justify="right")
+
+    table.add_row("Sessions recorded", str(agg["session_count"] or 0))
+    table.add_row("First session", _fmt_ts(agg["first_session"]))
+    table.add_row("Last session", _fmt_ts(agg["last_session"]))
+    table.add_row("Nodes total", str(node_total))
+    table.add_row("  Tier 1 (ephemeral)", str(tier_counts.get(1, 0)))
+    table.add_row("  Tier 2 (semantic)", str(tier_counts.get(2, 0)))
+    table.add_row("  Tier 3 (procedural)", str(tier_counts.get(3, 0)))
+    table.add_row("Nodes written (all time)", str(agg["total_written"] or 0))
+    table.add_row("Nodes evicted (all time)", str(agg["total_evicted"] or 0))
+    table.add_row("Nodes promoted (all time)", str(agg["total_promoted"] or 0))
+    table.add_row("Total tokens saved", str(agg["total_saved"] or 0))
+
+    console.print(table)
+
+
+@app.command()
 def install() -> None:
     """Write plugin.json to the Claude Code plugins directory."""
     plugins_dir = Path.home() / ".claude" / "plugins"
