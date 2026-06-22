@@ -272,23 +272,26 @@ class Graph:
         return _row_to_node(row)
 
     def get_all_nodes(self, project: str, tier: int | None = None) -> list[Node]:
-        """Return all nodes for a project, optionally filtered by tier.
+        """Return all nodes for a project ordered by weight descending.
+
+        Ordering by weight ensures callers (CLI, retrieval) naturally see the
+        most accessed/important nodes first without a secondary sort step.
 
         Args:
             project: Absolute project path.
             tier: If provided, only return nodes at this tier level.
 
         Returns:
-            List of Node objects for the project.
+            List of Node objects for the project, ordered by weight DESC.
         """
         if tier is not None:
             rows = self._conn.execute(
-                "SELECT * FROM nodes WHERE project = ? AND tier = ?",
+                "SELECT * FROM nodes WHERE project = ? AND tier = ? ORDER BY weight DESC",
                 (project, tier),
             ).fetchall()
         else:
             rows = self._conn.execute(
-                "SELECT * FROM nodes WHERE project = ?",
+                "SELECT * FROM nodes WHERE project = ? ORDER BY weight DESC",
                 (project,),
             ).fetchall()
         return [_row_to_node(row) for row in rows]
