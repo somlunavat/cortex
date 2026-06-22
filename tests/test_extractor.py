@@ -588,3 +588,43 @@ class TestHelpersCoverage:
         tree = parser.parse(b"class MyClass:\n    pass\n")
         names = _extract_class_names(tree.root_node)
         assert "MyClass" in names
+
+    # ---------------------------------------------------------------------------
+    # _split_on_conjunction — ambiguity guards
+    # ---------------------------------------------------------------------------
+
+    def test_split_since_causal(self) -> None:
+        conclusion, rationale = _split_on_conjunction(
+            "We chose asyncio since it avoids GIL issues."
+        )
+        assert "asyncio" in conclusion
+        assert rationale is not None
+        assert "GIL" in rationale
+
+    def test_split_since_temporal_not_split(self) -> None:
+        """'since 2021' is temporal — should not produce a rationale."""
+        conclusion, rationale = _split_on_conjunction(
+            "We have used pytest since 2021."
+        )
+        assert rationale is None
+
+    def test_split_as_causal_with_pronoun(self) -> None:
+        conclusion, rationale = _split_on_conjunction(
+            "We use WAL mode as it allows concurrent reads."
+        )
+        assert rationale is not None
+        assert "concurrent" in rationale
+
+    def test_split_as_comparison_not_split(self) -> None:
+        """'as fast as' is a comparison — should not split."""
+        conclusion, rationale = _split_on_conjunction(
+            "SQLite is as fast as Postgres for single-file workloads."
+        )
+        assert rationale is None
+
+    def test_split_because_still_works(self) -> None:
+        conclusion, rationale = _split_on_conjunction(
+            "We dropped Redis because it added an infra dependency."
+        )
+        assert rationale is not None
+        assert "infra" in rationale

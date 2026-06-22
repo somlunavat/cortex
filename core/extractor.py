@@ -529,16 +529,39 @@ def _score_durability(sent: Any, node_type: NodeType) -> float:
 def _split_on_conjunction(text: str) -> tuple[str, str | None]:
     """Split a sentence at a causal conjunction (because, since, etc.).
 
+    "since" is ambiguous: it can be temporal ("since 2021") or causal
+    ("since it avoids locks"). We only treat it as causal when the word
+    immediately following is NOT a digit, which catches date/year patterns.
+    "as" is similarly ambiguous when used as a comparison ("as fast as X"),
+    so we require the fragment after "as" to contain a verb-like token
+    (contains a common pronoun or "it", "we", "they", "this") before splitting.
+
     Returns:
         Tuple of (conclusion_text, rationale_text_or_None).
     """
     lower = text.lower()
     for conj in sorted(_SPLIT_CONJUNCTIONS, key=len, reverse=True):
         idx = lower.find(f" {conj} ")
-        if idx != -1:
-            conclusion = text[:idx].strip()[:MAX_TEXT_LENGTH]
-            rationale = text[idx + len(conj) + 2 :].strip()[:MAX_TEXT_LENGTH]
-            return conclusion, rationale
+        if idx == -1:
+            continue
+
+        rest_start = idx + len(conj) + 2
+        rest = lower[rest_start:].lstrip()
+
+        # Guard: "since <digit>" is temporal, not causal
+        if conj == "since" and rest and rest[0].isdigit():
+            continue
+
+        # Guard: "as" as comparison ("as fast as X") — require a pronoun/subject
+        if conj == "as":
+            subj_markers = {"it", "we", "they", "this", "that", "i", "you", "the"}
+            first_word = rest.split()[0] if rest.split() else ""
+            if first_word not in subj_markers:
+                continue
+
+        conclusion = text[:idx].strip()[:MAX_TEXT_LENGTH]
+        rationale = text[rest_start:].strip()[:MAX_TEXT_LENGTH]
+        return conclusion, rationale
     return text[:MAX_TEXT_LENGTH], None
 
 
