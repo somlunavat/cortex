@@ -72,8 +72,11 @@ CREATE INDEX IF NOT EXISTS idx_nodes_project_tier ON nodes(project, tier);
 CREATE INDEX IF NOT EXISTS idx_edges_source       ON edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target       ON edges(target_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_project   ON sessions(project);
+CREATE INDEX IF NOT EXISTS idx_nodes_project_source ON nodes(project, source);
+CREATE INDEX IF NOT EXISTS idx_nodes_project_scope  ON nodes(project, scope);
 
 -- ---------------------------------------------------------------------------
 -- Migrations (append only — never modify above)
 -- ---------------------------------------------------------------------------
 -- v1.0.0 → initial schema
+-- v1.1.0 → add idx_nodes_project_source, idx_nodes_project_scope

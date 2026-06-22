@@ -739,3 +739,59 @@ class TestTouchNodes:
         node = graph.get_node(n_id)
         assert node is not None
         assert node.session_count == 1 + 4  # initial 1 + 4 touches
+
+
+# ---------------------------------------------------------------------------
+# get_nodes_by_source
+# ---------------------------------------------------------------------------
+
+
+class TestGetNodesBySource:
+    def test_returns_only_matching_source(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="nlp node", source="nlp"))
+        graph.write_node(_make_node(dummy_embedding, text="git node", source="git"))
+        graph.write_node(_make_node(dummy_embedding, text="jsonl node", source="jsonl"))
+
+        nlp_nodes = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
+        assert len(nlp_nodes) == 1
+        assert nlp_nodes[0].text == "nlp node"
+
+    def test_returns_empty_when_no_match(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="git node", source="git"))
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="ast")
+        assert result == []
+
+    def test_tier_filter_applied_with_source(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(dummy_embedding, text="nlp tier1", source="nlp", tier=1)
+        )
+        graph.write_node(
+            _make_node(dummy_embedding, text="nlp tier3", source="nlp", tier=3)
+        )
+        tier3_only = graph.get_nodes_by_source(TEST_PROJECT, source="nlp", tier=3)
+        assert len(tier3_only) == 1
+        assert tier3_only[0].text == "nlp tier3"
+
+    def test_ordered_by_weight_descending(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="low weight", source="nlp", weight=0.5))
+        graph.write_node(_make_node(dummy_embedding, text="high weight", source="nlp", weight=9.0))
+        graph.write_node(_make_node(dummy_embedding, text="mid weight", source="nlp", weight=3.0))
+
+        nodes = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
+        weights = [n.weight for n in nodes]
+        assert weights == sorted(weights, reverse=True)
+
+    def test_different_project_excluded(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="other project", source="nlp", project="/other"))
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
+        assert result == []
