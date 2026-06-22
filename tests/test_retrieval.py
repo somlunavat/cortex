@@ -459,3 +459,56 @@ class TestFormatInjectionBlock:
         block = format_injection_block(nodes, TEST_PROJECT)
         assert "[RELEVANT CONTEXT" in block
         assert "jwt used for auth" in block
+
+
+    def test_rationale_shown_in_conventions(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        now = int(time.time())
+        node = Node(
+            id="",
+            type="convention",
+            tier=3,
+            text="always use asyncio for I/O",
+            rationale="it avoids thread-safety issues",
+            embedding=e,
+            precision_bits=32,
+            weight=5.0,
+            project=TEST_PROJECT,
+            scope="project",
+            source="nlp",
+            last_accessed=now,
+            created_at=now,
+            session_count=1,
+        )
+        block = format_injection_block([node], TEST_PROJECT)
+        assert "it avoids thread-safety issues" in block
+        assert "always use asyncio for I/O (it avoids thread-safety issues)" in block
+
+    def test_rationale_shown_in_context(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        now = int(time.time())
+        node = Node(
+            id="",
+            type="fact",
+            tier=1,
+            text="switched to sqlalchemy ORM",
+            rationale="reduces boilerplate for complex joins",
+            embedding=e,
+            precision_bits=32,
+            weight=1.0,
+            project=TEST_PROJECT,
+            scope="module",
+            source="nlp",
+            last_accessed=now,
+            created_at=now,
+            session_count=1,
+        )
+        block = format_injection_block([node], TEST_PROJECT)
+        assert "reduces boilerplate for complex joins" in block
+
+    def test_null_rationale_not_shown(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("auth module refactored", tier=1, embedding=e)]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "(None)" not in block
+        assert "auth module refactored\n" in block or "auth module refactored)" not in block

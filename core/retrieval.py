@@ -335,13 +335,19 @@ def format_injection_block(
         lines.append("")
         lines.append("[CONVENTIONS — always apply]")
         for node in conventions:
-            lines.append(f"• {node.text}")
+            line = f"• {node.text}"
+            if node.rationale:
+                line += f" ({node.rationale})"
+            lines.append(line)
 
     if context:
         lines.append("")
         lines.append("[RELEVANT CONTEXT — this session]")
         for node in context:
-            lines.append(f"• {node.text}")
+            line = f"• {node.text}"
+            if node.rationale:
+                line += f" ({node.rationale})"
+            lines.append(line)
 
     body = "\n".join(lines)
     token_count = _count_tokens(body)
