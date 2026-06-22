@@ -225,6 +225,10 @@ def search(
     query: str = typer.Argument(..., help="Text to search for in memory nodes"),
     tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all tiers)"),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to show"),
+    source: str = typer.Option(
+        "", "--source", "-s",
+        help="Filter by extraction source: jsonl, ast, git, or nlp",
+    ),
 ) -> None:
     """Search memory nodes by text using BM25 ranking."""
     root = _project_root()
@@ -235,7 +239,17 @@ def search(
         raise typer.Exit(0)
 
     project = str(root)
-    nodes = g.get_all_nodes(project=project, tier=tier if tier else None)
+    valid_sources = {"jsonl", "ast", "git", "nlp"}
+    if source and source not in valid_sources:
+        console.print(f"[red]Invalid source '{source}'. Choose from: {', '.join(sorted(valid_sources))}[/red]")
+        raise typer.Exit(1)
+
+    if source:
+        nodes = g.get_nodes_by_source(
+            project=project, source=source, tier=tier if tier else None
+        )
+    else:
+        nodes = g.get_all_nodes(project=project, tier=tier if tier else None)
 
     if not nodes:
         console.print("No nodes found.")
