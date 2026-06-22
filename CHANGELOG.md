@@ -10,14 +10,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `cortex export` CLI command — dump memory nodes to JSON or CSV for backup and inspection
+- `cortex import-` CLI command — restore nodes from a JSON export, recomputing embeddings from text
+- `cortex sessions` CLI command — list recent extraction sessions with node and token stats
+- `cortex stats` CLI command — aggregate all-time stats: session count, node totals by tier, total tokens saved
+- `cortex search --source` flag — filter BM25 search results by extraction channel (jsonl/ast/git/nlp)
+- `graph.get_nodes_by_source()` — efficient source-filtered node query using new composite index
 - `plugin/skills/cortex-status/SKILL.md` — `/cortex-status` slash command for inline memory summary
 - `tests/test_quality.py` — memory quality eval tests and `@pytest.mark.slow` performance regression tests
+- `tests/test_cli.py` — CLI integration tests using typer CliRunner (21 tests)
 - `tests/fixtures/transcripts/with_failures.jsonl` — realistic multi-failure session fixture
 - `tests/fixtures/transcripts/large.jsonl` — 497-event synthetic session for performance testing
 - `count_tokens()` public function in `core/retrieval.py`
+- Schema indexes: `idx_nodes_project_source`, `idx_nodes_project_scope` for faster filtered queries
 
 ### Fixed
 
+- `touch_nodes` now increments `session_count`, fixing tier-1→2 promotion that requires `session_count >= 3`
+- `format_injection_block` now shows rationale inline — `• <text> (<rationale>)` — so Claude sees the "why"
+- `_split_on_conjunction`: "since" is no longer treated as causal when followed by a digit (temporal guard); "as" is only treated as causal when followed by a subject pronoun
+- `get_all_nodes` now returns nodes `ORDER BY weight DESC` instead of arbitrary insertion order
 - `graph.write_session` now persists `tokens_raw` and `tokens_injected` so the dashboard token savings chart has real data
 - Dashboard `api_sessions` endpoint now includes `nodes_promoted` column
 - `hooks/extract.py` computes projected token savings at session end
