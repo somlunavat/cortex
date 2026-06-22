@@ -221,3 +221,124 @@ class TestStatsCommand:
         result = self._invoke_stats(tmp_db, project)
         assert result.exit_code == 0
         assert "0" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex import_
+# ---------------------------------------------------------------------------
+
+
+class TestImportCommand:
+    def _make_export_json(
+        self,
+        tmp_path: Path,
+        records: list[dict],
+        filename: str = "export.json",
+    ) -> Path:
+        import json
+
+        p = tmp_path / filename
+        p.write_text(json.dumps(records))
+        return p
+
+    def _invoke_import(self, tmp_db: Path, project: str, file_path: Path, extra: list[str] | None = None) -> object:
+        args = ["import-", str(file_path), "--project", project] + (extra or [])
+        return runner.invoke(app, args, env={"CORTEX_DB_PATH": str(tmp_db)})
+
+    def test_import_writes_nodes(self, tmp_db: Path, project: str, tmp_path: Path) -> None:
+        records = [
+            {"text": "always validate at boundaries", "type": "convention", "tier": 3,
+             "scope": "project", "source": "nlp", "weight": 5.0, "session_count": 3,
+             "rationale": "catches external input errors early"},
+        ]
+        f = self._make_export_json(tmp_path, records)
+        result = self._invoke_import(tmp_db, project, f)
+        assert result.exit_code == 0
+        assert "Imported 1" in result.output
+
+        conn = sqlite3.connect(str(tmp_db))
+        rows = conn.execute("SELECT text FROM nodes WHERE project = ?", (project,)).fetchall()
+        conn.close()
+        assert any("validate at boundaries" in r[0] for r in rows)
+
+    def test_import_skips_duplicates_by_default(self, tmp_db: Path, project: str, tmp_path: Path) -> None:
+        records = [{"text": "use WAL mode for concurrency", "type": "fact", "tier": 2,
+                    "scope": "project", "source": "nlp", "weight": 2.0, "session_count": 1}]
+        f = self._make_export_json(tmp_path, records)
+        self._invoke_import(tmp_db, project, f)
+        result = self._invoke_import(tmp_db, project, f)
+        assert "skipped" in result.output
+        # Second import should say 1 skipped
+        assert "1 skipped" in result.output
+
+    def test_import_file_not_found(self, tmp_db: Path, project: str, tmp_path: Path) -> None:
+        result = self._invoke_import(tmp_db, project, tmp_path / "missing.json")
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+    def test_import_invalid_json(self, tmp_db: Path, project: str, tmp_path: Path) -> None:
+        bad = tmp_path / "bad.json"
+        bad.write_text("not json at all")
+        result = self._invoke_import(tmp_db, project, bad)
+        assert result.exit_code != 0
+        assert "Invalid JSON" in result.output or "invalid" in result.output.lower()
+
+    def test_import_empty_text_skipped(self, tmp_db: Path, project: str, tmp_path: Path) -> None:
+        records = [{"text": "", "type": "fact", "tier": 1, "scope": "project",
+                    "source": "nlp", "weight": 1.0, "session_count": 1}]
+        f = self._make_export_json(tmp_path, records)
+        result = self._invoke_import(tmp_db, project, f)
+        assert result.exit_code == 0
+        assert "1 skipped" in result.output
+
+    def test_import_coerces_invalid_tier(self, tmp_db: Path, project: str, tmp_path: Path) -> None:
+        """tier=99 should be coerced to tier=1 rather than failing."""
+        records = [{"text": "coerce tier node", "type": "observation", "tier": 99,
+                    "scope": "project", "source": "jsonl", "weight": 1.0, "session_count": 1}]
+        f = self._make_export_json(tmp_path, records)
+        result = self._invoke_import(tmp_db, project, f)
+        assert result.exit_code == 0
+        assert "Imported 1" in result.output
+
+    def test_import_allows_duplicates_when_flag_set(self, tmp_db: Path, project: str, tmp_path: Path) -> None:
+        records = [{"text": "duplicate allowed", "type": "fact", "tier": 1,
+                    "scope": "project", "source": "nlp", "weight": 1.0, "session_count": 1}]
+        f = self._make_export_json(tmp_path, records)
+        self._invoke_import(tmp_db, project, f)
+        result = self._invoke_import(tmp_db, project, f, ["--allow-duplicates"])
+        assert "Imported 1" in result.output
+
+    def test_export_then_import_roundtrip(self, tmp_db: Path, project: str, tmp_path: Path) -> None:
+        """Export a node to JSON and import it into a fresh database."""
+        import json
+
+        _seed_node(tmp_db, project, text="roundtrip test node", tier=1)
+
+        export_file = tmp_path / "export.json"
+        runner.invoke(
+            app,
+            ["export", "--project", project, "--out", str(export_file)],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert export_file.exists()
+
+        db2 = tmp_path / "fresh.db"
+        conn = sqlite3.connect(str(db2))
+        conn.executescript(Path("schema.sql").read_text())
+        conn.close()
+
+        result = runner.invoke(
+            app,
+            ["import-", str(export_file), "--project", project],
+            env={"CORTEX_DB_PATH": str(db2)},
+        )
+        assert result.exit_code == 0
+        assert "Imported 1" in result.output
+
+        conn = sqlite3.connect(str(db2))
+        row = conn.execute(
+            "SELECT text FROM nodes WHERE project = ?", (project,)
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert "roundtrip test node" in row[0]
