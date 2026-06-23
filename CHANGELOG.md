@@ -11,6 +11,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `cortex list` CLI command — paginated node table with `--tier`, `--type`, `--source`, `--sort`, `--limit` filters
 - `cortex doctor` CLI command — health check for spaCy model, sentence-transformers, tiktoken, SQLite schema, hook scripts, and plugin manifest
+- `cortex pin <node-id>` — force a node to tier 3 (permanent memory, never decayed)
+- `cortex annotate <node-id> --rationale "..."` — set or update a node's rationale for richer injection output
+- `cortex bump <node-id> --by N` — manually increase a node's weight to reinforce retrieval priority
+- `graph.update_node_rationale(node_id, rationale)` — set or clear rationale on any node
+- `graph.set_node_weight(node_id, weight)` — set absolute weight on a node (floored at 0.0)
 
 - `cortex export` CLI command — dump memory nodes to JSON or CSV for backup and inspection
 - `cortex import-` CLI command — restore nodes from a JSON export, recomputing embeddings from text

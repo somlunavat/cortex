@@ -557,6 +557,40 @@ class Graph:
         )
         self._conn.commit()
 
+    def update_node_rationale(self, node_id: str, rationale: str | None) -> bool:
+        """Set or clear the rationale field on a node.
+
+        Args:
+            node_id: UUID of the node to update.
+            rationale: New rationale string, or None to clear it.
+
+        Returns:
+            True if a row was updated, False if node not found.
+        """
+        cursor = self._conn.execute(
+            "UPDATE nodes SET rationale = ? WHERE id = ?",
+            (rationale, node_id),
+        )
+        self._conn.commit()
+        return cursor.rowcount > 0
+
+    def set_node_weight(self, node_id: str, weight: float) -> bool:
+        """Set a node's weight to an absolute value (floored at 0.0).
+
+        Args:
+            node_id: UUID of the node.
+            weight: New weight value (floored at 0.0).
+
+        Returns:
+            True if a row was updated, False if node not found.
+        """
+        cursor = self._conn.execute(
+            "UPDATE nodes SET weight = MAX(0.0, ?) WHERE id = ?",
+            (weight, node_id),
+        )
+        self._conn.commit()
+        return cursor.rowcount > 0
+
     def touch_nodes(self, node_ids: list[str], now: int) -> None:
         """Update last_accessed, bump weight, and increment session_count.
 
