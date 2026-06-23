@@ -9,6 +9,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `cortex list` CLI command — paginated node table with `--tier`, `--type`, `--source`, `--sort`, `--limit` filters
+- `cortex doctor` CLI command — health check for spaCy model, sentence-transformers, tiktoken, SQLite schema, hook scripts, and plugin manifest
+
 - `cortex export` CLI command — dump memory nodes to JSON or CSV for backup and inspection
 - `cortex import-` CLI command — restore nodes from a JSON export, recomputing embeddings from text
 - `cortex sessions` CLI command — list recent extraction sessions with node and token stats
