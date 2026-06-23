@@ -460,7 +460,6 @@ class TestFormatInjectionBlock:
         assert "[RELEVANT CONTEXT" in block
         assert "jwt used for auth" in block
 
-
     def test_rationale_shown_in_conventions(self, rng: np.random.Generator) -> None:
         e = _random_embedding(rng)
         now = int(time.time())
@@ -511,4 +510,7 @@ class TestFormatInjectionBlock:
         nodes = [_make_node("auth module refactored", tier=1, embedding=e)]
         block = format_injection_block(nodes, TEST_PROJECT)
         assert "(None)" not in block
-        assert "auth module refactored\n" in block or "auth module refactored)" not in block
+        assert (
+            "auth module refactored\n" in block
+            or "auth module refactored)" not in block
+        )

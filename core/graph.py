@@ -455,15 +455,8 @@ class Graph:
             return {}
 
         placeholders = ",".join("?" * len(node_ids))
-        rows = self._conn.execute(
-            f"""
-            SELECT source_id, target_id, strength, last_seen
-            FROM edges
-            WHERE source_id IN ({placeholders})
-               OR target_id IN ({placeholders})
-            """,
-            node_ids + node_ids,
-        ).fetchall()
+        sql = f"SELECT source_id, target_id, strength, last_seen FROM edges WHERE source_id IN ({placeholders}) OR target_id IN ({placeholders})"  # nosec B608
+        rows = self._conn.execute(sql, node_ids + node_ids).fetchall()
 
         result: dict[str, list[Edge]] = {nid: [] for nid in node_ids}
         for row in rows:
@@ -638,9 +631,8 @@ class Graph:
         if not node_ids:
             return 0
         placeholders = ",".join("?" * len(node_ids))
-        cursor = self._conn.execute(
-            f"DELETE FROM nodes WHERE id IN ({placeholders})", node_ids
-        )
+        sql = f"DELETE FROM nodes WHERE id IN ({placeholders})"  # nosec B608
+        cursor = self._conn.execute(sql, node_ids)
         self._conn.commit()
         return cursor.rowcount
 
@@ -660,14 +652,6 @@ class Graph:
         if not node_ids:
             return
         placeholders = ",".join("?" * len(node_ids))
-        self._conn.execute(
-            f"""
-            UPDATE nodes
-            SET last_accessed = ?,
-                weight = weight + 0.1,
-                session_count = session_count + 1
-            WHERE id IN ({placeholders})
-            """,
-            [now, *node_ids],
-        )
+        sql = f"UPDATE nodes SET last_accessed = ?, weight = weight + 0.1, session_count = session_count + 1 WHERE id IN ({placeholders})"  # nosec B608
+        self._conn.execute(sql, [now, *node_ids])
         self._conn.commit()

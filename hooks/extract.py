@@ -140,9 +140,7 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
     return nodes_written
 
 
-def _compute_token_stats(
-    graph: Graph, project: str
-) -> tuple[int | None, int | None]:
+def _compute_token_stats(graph: Graph, project: str) -> tuple[int | None, int | None]:
     """Compute token savings metrics for the session record.
 
     tokens_raw = tokens in a full injection block containing ALL project nodes

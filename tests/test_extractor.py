@@ -603,13 +603,13 @@ class TestHelpersCoverage:
 
     def test_split_since_temporal_not_split(self) -> None:
         """'since 2021' is temporal — should not produce a rationale."""
-        conclusion, rationale = _split_on_conjunction(
+        _conclusion, rationale = _split_on_conjunction(
             "We have used pytest since 2021."
         )
         assert rationale is None
 
     def test_split_as_causal_with_pronoun(self) -> None:
-        conclusion, rationale = _split_on_conjunction(
+        _conclusion, rationale = _split_on_conjunction(
             "We use WAL mode as it allows concurrent reads."
         )
         assert rationale is not None
@@ -617,13 +617,13 @@ class TestHelpersCoverage:
 
     def test_split_as_comparison_not_split(self) -> None:
         """'as fast as' is a comparison — should not split."""
-        conclusion, rationale = _split_on_conjunction(
+        _conclusion, rationale = _split_on_conjunction(
             "SQLite is as fast as Postgres for single-file workloads."
         )
         assert rationale is None
 
     def test_split_because_still_works(self) -> None:
-        conclusion, rationale = _split_on_conjunction(
+        _conclusion, rationale = _split_on_conjunction(
             "We dropped Redis because it added an infra dependency."
         )
         assert rationale is not None

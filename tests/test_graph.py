@@ -781,9 +781,15 @@ class TestGetNodesBySource:
     def test_ordered_by_weight_descending(
         self, graph: Graph, dummy_embedding: np.ndarray
     ) -> None:
-        graph.write_node(_make_node(dummy_embedding, text="low weight", source="nlp", weight=0.5))
-        graph.write_node(_make_node(dummy_embedding, text="high weight", source="nlp", weight=9.0))
-        graph.write_node(_make_node(dummy_embedding, text="mid weight", source="nlp", weight=3.0))
+        graph.write_node(
+            _make_node(dummy_embedding, text="low weight", source="nlp", weight=0.5)
+        )
+        graph.write_node(
+            _make_node(dummy_embedding, text="high weight", source="nlp", weight=9.0)
+        )
+        graph.write_node(
+            _make_node(dummy_embedding, text="mid weight", source="nlp", weight=3.0)
+        )
 
         nodes = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
         weights = [n.weight for n in nodes]
@@ -792,7 +798,11 @@ class TestGetNodesBySource:
     def test_different_project_excluded(
         self, graph: Graph, dummy_embedding: np.ndarray
     ) -> None:
-        graph.write_node(_make_node(dummy_embedding, text="other project", source="nlp", project="/other"))
+        graph.write_node(
+            _make_node(
+                dummy_embedding, text="other project", source="nlp", project="/other"
+            )
+        )
         result = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
         assert result == []
 
@@ -976,7 +986,10 @@ class TestDeleteNodesBulk:
     def test_deletes_all_specified_nodes(
         self, graph: Graph, dummy_embedding: np.ndarray
     ) -> None:
-        ids = [graph.write_node(_make_node(dummy_embedding, text=f"node {i}")) for i in range(3)]
+        ids = [
+            graph.write_node(_make_node(dummy_embedding, text=f"node {i}"))
+            for i in range(3)
+        ]
         deleted = graph.delete_nodes_bulk(ids)
         assert deleted == 3
         for nid in ids:

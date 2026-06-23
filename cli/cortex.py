@@ -20,6 +20,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -57,7 +58,9 @@ def _fmt_ts(ts: int | None) -> str:
 
 @app.command()
 def status(
-    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
 ) -> None:
     """Show node counts by tier, type distribution, source breakdown, and last session."""
     root = Path(project_path) if project_path else _project_root()
@@ -134,7 +137,9 @@ def status(
 @app.command()
 def recent(
     limit: int = typer.Option(10, "--limit", "-n", help="Number of nodes to show"),
-    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
 ) -> None:
     """Show the most recently accessed memory nodes.
 
@@ -311,7 +316,9 @@ def search(
     tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all tiers)"),
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to show"),
     source: str = typer.Option(
-        "", "--source", "-s",
+        "",
+        "--source",
+        "-s",
         help="Filter by extraction source: jsonl, ast, git, or nlp",
     ),
 ) -> None:
@@ -326,7 +333,9 @@ def search(
     project = str(root)
     valid_sources = {"jsonl", "ast", "git", "nlp"}
     if source and source not in valid_sources:
-        console.print(f"[red]Invalid source '{source}'. Choose from: {', '.join(sorted(valid_sources))}[/red]")
+        console.print(
+            f"[red]Invalid source '{source}'. Choose from: {', '.join(sorted(valid_sources))}[/red]"
+        )
         raise typer.Exit(1)
 
     if source:
@@ -413,7 +422,9 @@ def export(
         "", "--project", help="Project path (defaults to CWD)"
     ),
     tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all tiers)"),
-    fmt: str = typer.Option("json", "--format", "-f", help="Output format: json or csv"),
+    fmt: str = typer.Option(
+        "json", "--format", "-f", help="Output format: json or csv"
+    ),
 ) -> None:
     """Export memory nodes to JSON or CSV for backup or inspection."""
     root = Path(project_path) if project_path else _project_root()
@@ -438,9 +449,18 @@ def export(
         writer = csv.DictWriter(
             buf,
             fieldnames=[
-                "id", "type", "tier", "text", "rationale", "weight",
-                "session_count", "precision_bits", "scope", "source",
-                "last_accessed", "created_at",
+                "id",
+                "type",
+                "tier",
+                "text",
+                "rationale",
+                "weight",
+                "session_count",
+                "precision_bits",
+                "scope",
+                "source",
+                "last_accessed",
+                "created_at",
             ],
         )
         writer.writeheader()
@@ -485,9 +505,7 @@ def export(
 
     if output:
         Path(output).write_text(content)
-        console.print(
-            f"[green]Exported {len(nodes)} nodes to:[/green] {output}"
-        )
+        console.print(f"[green]Exported {len(nodes)} nodes to:[/green] {output}")
     else:
         print(content)
 
@@ -523,7 +541,7 @@ def sessions(
         console.print("[dim]No sessions recorded for this project.[/dim]")
         raise typer.Exit(0)
 
-    table = Table(title=f"Sessions — {str(root)}")
+    table = Table(title=f"Sessions — {root!s}")
     table.add_column("Ended", style="cyan", no_wrap=True)
     table.add_column("Written", justify="right")
     table.add_column("Evicted", justify="right")
@@ -615,7 +633,8 @@ def import_(
         "", "--project", help="Project path (defaults to CWD)"
     ),
     skip_duplicates: bool = typer.Option(
-        True, "--skip-duplicates/--allow-duplicates",
+        True,
+        "--skip-duplicates/--allow-duplicates",
         help="Skip nodes whose text already exists in the graph (default: skip)",
     ),
 ) -> None:
@@ -640,10 +659,10 @@ def import_(
 
     try:
         raw = src.read_text(encoding="utf-8")
-        records: list[dict] = json.loads(raw)
+        records: list[Any] = json.loads(raw)
     except (json.JSONDecodeError, ValueError) as exc:
         console.print(f"[red]Invalid JSON:[/red] {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     if not isinstance(records, list):
         console.print("[red]Expected a JSON array at the top level.[/red]")
@@ -655,9 +674,10 @@ def import_(
         nodes = g.get_all_nodes(project=project)
         existing_texts = {n.text for n in nodes}
 
+    import time as _time
+
     from core.embedder import embed
     from core.graph import Node
-    import time as _time
 
     imported = 0
     skipped = 0
@@ -723,7 +743,9 @@ def import_(
 @app.command()
 def pin(
     node_id: str = typer.Argument(..., help="Node UUID to pin to tier 3"),
-    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
 ) -> None:
     """Permanently pin a node to tier 3 (procedural memory).
 
@@ -747,7 +769,9 @@ def pin(
         raise typer.Exit(0)
 
     import time as _time
+
     import numpy as np
+
     from core.embedder import serialize
 
     now = int(_time.time())
@@ -770,8 +794,12 @@ def pin(
 @app.command()
 def annotate(
     node_id: str = typer.Argument(..., help="Node UUID to annotate"),
-    rationale: str = typer.Option(..., "--rationale", "-r", help="Rationale text to set"),
-    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+    rationale: str = typer.Option(
+        ..., "--rationale", "-r", help="Rationale text to set"
+    ),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
 ) -> None:
     """Set or update the rationale for a node.
 
@@ -803,7 +831,9 @@ def annotate(
 def bump(
     node_id: str = typer.Argument(..., help="Node UUID to bump"),
     amount: float = typer.Option(1.0, "--by", help="Amount to add to the node weight"),
-    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
 ) -> None:
     """Increase a node's weight to reinforce its retrieval priority.
 
@@ -836,10 +866,18 @@ def bump(
 
 @app.command()
 def clean(
-    days: int = typer.Option(7, "--days", "-d", help="Remove nodes inactive for at least this many days"),
-    tier: int = typer.Option(0, "--tier", "-t", help="Limit to a specific tier (0 = all non-tier-3)"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without deleting"),
-    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+    days: int = typer.Option(
+        7, "--days", "-d", help="Remove nodes inactive for at least this many days"
+    ),
+    tier: int = typer.Option(
+        0, "--tier", "-t", help="Limit to a specific tier (0 = all non-tier-3)"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be removed without deleting"
+    ),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
 ) -> None:
     """Remove stale tier-1 and tier-2 nodes that have not been accessed recently.
 
@@ -862,7 +900,9 @@ def clean(
         console.print(f"[green]No stale nodes[/green] older than {days} days.")
         raise typer.Exit(0)
 
-    table = Table(title=f"Stale nodes (inactive > {days} days){' [DRY RUN]' if dry_run else ''}")
+    table = Table(
+        title=f"Stale nodes (inactive > {days} days){' [DRY RUN]' if dry_run else ''}"
+    )
     table.add_column("T", style="cyan", justify="center", width=3)
     table.add_column("Last accessed", style="dim")
     table.add_column("Weight", justify="right", width=7)
@@ -892,11 +932,19 @@ def clean(
 @app.command(name="list")
 def list_nodes(
     tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all)"),
-    node_type: str = typer.Option("", "--type", help="Filter by type: observation, fact, convention, error"),
-    source: str = typer.Option("", "--source", "-s", help="Filter by source: jsonl, ast, git, nlp"),
-    sort: str = typer.Option("weight", "--sort", help="Sort by: weight, created, accessed"),
+    node_type: str = typer.Option(
+        "", "--type", help="Filter by type: observation, fact, convention, error"
+    ),
+    source: str = typer.Option(
+        "", "--source", "-s", help="Filter by source: jsonl, ast, git, nlp"
+    ),
+    sort: str = typer.Option(
+        "weight", "--sort", help="Sort by: weight, created, accessed"
+    ),
     limit: int = typer.Option(25, "--limit", "-n", help="Maximum nodes to show"),
-    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
 ) -> None:
     """List memory nodes in a paginated table with optional filters."""
     root = Path(project_path) if project_path else _project_root()
@@ -912,19 +960,29 @@ def list_nodes(
     valid_sorts = {"weight", "created", "accessed"}
 
     if node_type and node_type not in valid_types:
-        console.print(f"[red]Invalid type '{node_type}'. Choose from: {', '.join(sorted(valid_types))}[/red]")
+        console.print(
+            f"[red]Invalid type '{node_type}'. Choose from: {', '.join(sorted(valid_types))}[/red]"
+        )
         raise typer.Exit(1)
     if source and source not in valid_sources:
-        console.print(f"[red]Invalid source '{source}'. Choose from: {', '.join(sorted(valid_sources))}[/red]")
+        console.print(
+            f"[red]Invalid source '{source}'. Choose from: {', '.join(sorted(valid_sources))}[/red]"
+        )
         raise typer.Exit(1)
     if sort not in valid_sorts:
-        console.print(f"[red]Invalid sort '{sort}'. Choose from: {', '.join(sorted(valid_sorts))}[/red]")
+        console.print(
+            f"[red]Invalid sort '{sort}'. Choose from: {', '.join(sorted(valid_sorts))}[/red]"
+        )
         raise typer.Exit(1)
 
-    sort_col = {"weight": "weight", "created": "created_at", "accessed": "last_accessed"}[sort]
+    sort_col = {
+        "weight": "weight",
+        "created": "created_at",
+        "accessed": "last_accessed",
+    }[sort]
 
     clauses = ["project = ?"]
-    params: list = [project]
+    params: list[Any] = [project]
     if tier:
         clauses.append("tier = ?")
         params.append(tier)
@@ -937,13 +995,13 @@ def list_nodes(
 
     where = " AND ".join(clauses)
     rows = g._conn.execute(
-        f"SELECT id, type, tier, text, weight, session_count, source, created_at "
-        f"FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?",
-        params + [limit],
+        f"SELECT id, type, tier, text, weight, session_count, source, created_at "  # nosec B608
+        f"FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?",  # nosec B608
+        [*params, limit],
     ).fetchall()
 
     total = g._conn.execute(
-        f"SELECT COUNT(*) FROM nodes WHERE {where}", params
+        f"SELECT COUNT(*) FROM nodes WHERE {where}", params  # nosec B608
     ).fetchone()[0]
 
     if not rows:
@@ -983,12 +1041,16 @@ def list_nodes(
 
     console.print(table)
     if total > limit:
-        console.print(f"[dim]Showing {limit} of {total} nodes. Use --limit to see more.[/dim]")
+        console.print(
+            f"[dim]Showing {limit} of {total} nodes. Use --limit to see more.[/dim]"
+        )
 
 
 @app.command()
 def doctor(
-    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
 ) -> None:
     """Verify that all Cortex runtime dependencies are healthy.
 
@@ -1016,6 +1078,7 @@ def doctor(
     # spaCy model
     try:
         import spacy
+
         nlp = spacy.load("en_core_web_sm")
         check("spaCy en_core_web_sm", True, f"v{nlp.meta.get('version', '?')}")
     except Exception as exc:
@@ -1024,7 +1087,10 @@ def doctor(
     # sentence-transformers
     try:
         from sentence_transformers import SentenceTransformer
-        SentenceTransformer.__new__(SentenceTransformer)  # don't load model, just import
+
+        SentenceTransformer.__new__(
+            SentenceTransformer
+        )  # don't load model, just import
         check("sentence-transformers", True, "import OK")
     except Exception as exc:
         check("sentence-transformers", False, str(exc))
@@ -1032,6 +1098,7 @@ def doctor(
     # tiktoken
     try:
         import tiktoken
+
         tiktoken.get_encoding("cl100k_base")
         check("tiktoken cl100k_base", True, "encoding loaded")
     except Exception as exc:
@@ -1042,19 +1109,31 @@ def doctor(
     check(
         "Cortex database",
         db_exists,
-        str(root / ".cortex" / "cortex.db") if db_exists else "not found (run a session first)",
+        (
+            str(root / ".cortex" / "cortex.db")
+            if db_exists
+            else "not found (run a session first)"
+        ),
     )
 
     # Hook scripts
     for hook_name in ("inject.py", "extract.py", "compact.py"):
         path = hooks_dir / hook_name
-        check(f"Hook: {hook_name}", path.exists(), str(path) if path.exists() else "missing")
+        check(
+            f"Hook: {hook_name}",
+            path.exists(),
+            str(path) if path.exists() else "missing",
+        )
 
     # Plugin manifest
     check(
         "Plugin manifest",
         plugin_path.exists(),
-        str(plugin_path) if plugin_path.exists() else "not installed — run: cortex install",
+        (
+            str(plugin_path)
+            if plugin_path.exists()
+            else "not installed — run: cortex install"
+        ),
     )
 
     console.print()

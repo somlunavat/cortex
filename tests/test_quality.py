@@ -22,9 +22,9 @@ from core.extractor import (
     nlp_channel,
     run_extraction,
 )
+from core.graph import Graph
 from core.parser import EventType, parse_transcript
 from core.retrieval import TOKEN_BUDGET, count_tokens, format_injection_block, retrieve
-from core.graph import Graph
 
 TEST_PROJECT = "/tmp/cortex_test_project"
 
@@ -91,9 +91,9 @@ class TestSimpleFixtureQuality:
     def test_candidate_volume_reasonable(self) -> None:
         events = list(parse_transcript(SIMPLE_FIXTURE))
         candidates = run_extraction(events, TEST_PROJECT)
-        assert 1 <= len(candidates) <= 12, (
-            f"Expected 1-12 candidates from simple.jsonl, got {len(candidates)}"
-        )
+        assert (
+            1 <= len(candidates) <= 12
+        ), f"Expected 1-12 candidates from simple.jsonl, got {len(candidates)}"
 
 
 # ---------------------------------------------------------------------------
@@ -121,9 +121,9 @@ class TestDecisionsFixtureQuality:
         retraction_markers = {"actually let's not", "on second thought", "never mind"}
         for c in candidates:
             lower = c.text.lower()
-            assert not any(m in lower for m in retraction_markers), (
-                f"Retracted statement leaked into extraction: {c.text!r}"
-            )
+            assert not any(
+                m in lower for m in retraction_markers
+            ), f"Retracted statement leaked into extraction: {c.text!r}"
 
     def test_no_generic_advice_extracted(self) -> None:
         events = list(parse_transcript(DECISIONS_FIXTURE))
@@ -131,9 +131,9 @@ class TestDecisionsFixtureQuality:
         generic_phrases = {"let me think", "let me check", "i'll look at"}
         for c in candidates:
             lower = c.text.lower()
-            assert not any(p in lower for p in generic_phrases), (
-                f"Generic advice leaked into extraction: {c.text!r}"
-            )
+            assert not any(
+                p in lower for p in generic_phrases
+            ), f"Generic advice leaked into extraction: {c.text!r}"
 
     def test_decision_node_has_rationale_when_because_present(self) -> None:
         events = list(parse_transcript(DECISIONS_FIXTURE))
@@ -143,10 +143,12 @@ class TestDecisionsFixtureQuality:
             if e.type == EventType.ASSISTANT_MESSAGE and e.data.get("text")
         ]
         candidates = nlp_channel(prose, TEST_PROJECT)
-        facts_with_rationale = [c for c in candidates if c.type == NodeType.FACT and c.rationale]
-        assert len(facts_with_rationale) >= 1, (
-            "Decision sentences with 'because' should produce fact nodes with rationale"
-        )
+        facts_with_rationale = [
+            c for c in candidates if c.type == NodeType.FACT and c.rationale
+        ]
+        assert (
+            len(facts_with_rationale) >= 1
+        ), "Decision sentences with 'because' should produce fact nodes with rationale"
 
 
 # ---------------------------------------------------------------------------
@@ -165,37 +167,34 @@ class TestFailuresFixtureQuality:
         events = list(parse_transcript(FAILURES_FIXTURE))
         candidates = jsonl_channel(events, TEST_PROJECT)
         errors = [c for c in candidates if c.type == NodeType.ERROR]
-        assert len(errors) >= 3, (
-            f"Expected >= 3 error nodes from with_failures.jsonl, got {len(errors)}"
-        )
+        assert (
+            len(errors) >= 3
+        ), f"Expected >= 3 error nodes from with_failures.jsonl, got {len(errors)}"
 
     def test_error_node_includes_exit_code(self) -> None:
         events = list(parse_transcript(FAILURES_FIXTURE))
         candidates = jsonl_channel(events, TEST_PROJECT)
         errors = [c for c in candidates if c.type == NodeType.ERROR]
-        assert all("exit" in c.text for c in errors), (
-            "All error nodes should reference the exit code"
-        )
+        assert all(
+            "exit" in c.text for c in errors
+        ), "All error nodes should reference the exit code"
 
     def test_error_summary_extracted_from_output(self) -> None:
         events = list(parse_transcript(FAILURES_FIXTURE))
         candidates = jsonl_channel(events, TEST_PROJECT)
         errors = [c for c in candidates if c.type == NodeType.ERROR]
         keywords = {"AssertionError", "ImportError", "error"}
-        found = any(
-            any(kw in c.text for kw in keywords)
-            for c in errors
-        )
+        found = any(any(kw in c.text for kw in keywords) for c in errors)
         assert found, "At least one error node should include a failure keyword"
 
     def test_handler_hotspot_detected_from_repeated_edits(self) -> None:
-        """handler.py written 3× while fixing the bug should produce a hotspot node."""
+        """handler.py written 3x while fixing the bug should produce a hotspot node."""
         events = list(parse_transcript(FAILURES_FIXTURE))
         candidates = jsonl_channel(events, TEST_PROJECT)
         obs_texts = [c.text for c in candidates if c.type == NodeType.OBSERVATION]
-        assert any("handler.py" in t for t in obs_texts), (
-            "Expected hotspot observation for handler.py (written 3 times in session)"
-        )
+        assert any(
+            "handler.py" in t for t in obs_texts
+        ), "Expected hotspot observation for handler.py (written 3 times in session)"
 
     def test_source_is_jsonl_for_all_errors(self) -> None:
         events = list(parse_transcript(FAILURES_FIXTURE))
@@ -224,6 +223,7 @@ class TestInjectionBlockQuality:
         for i in range(20):
             emb = rng_gen.random(384).astype(np.float32)
             from core.graph import Node
+
             node = Node(
                 id="",
                 type="observation",
@@ -240,15 +240,14 @@ class TestInjectionBlockQuality:
                 created_at=now,
                 session_count=1,
             )
-            from core.embedder import serialize
             mem_graph.write_node(node)
 
         result = retrieve("refactoring authentication", TEST_PROJECT, mem_graph)
         block = format_injection_block(result, TEST_PROJECT)
         token_count = count_tokens(block)
-        assert token_count <= TOKEN_BUDGET, (
-            f"Injection block exceeds {TOKEN_BUDGET}-token budget: {token_count} tokens"
-        )
+        assert (
+            token_count <= TOKEN_BUDGET
+        ), f"Injection block exceeds {TOKEN_BUDGET}-token budget: {token_count} tokens"
 
     def test_injection_block_has_required_structure(self, mem_graph: Graph) -> None:
         """Injection block always starts and ends with the expected markers."""
@@ -257,6 +256,7 @@ class TestInjectionBlockQuality:
         rng = np.random.default_rng(seed=7)
         emb = rng.random(384).astype(np.float32)
         from core.graph import Node
+
         now = int(time.time())
         node = Node(
             id="",
@@ -281,14 +281,13 @@ class TestInjectionBlockQuality:
         assert "END CORTEX MEMORY" in block, "Block must end with footer"
         assert TEST_PROJECT in block, "Block must include project path"
 
-    def test_tier3_nodes_always_in_conventions_section(
-        self, mem_graph: Graph
-    ) -> None:
+    def test_tier3_nodes_always_in_conventions_section(self, mem_graph: Graph) -> None:
         import numpy as np
 
         rng = np.random.default_rng(seed=11)
         emb = rng.random(384).astype(np.float32)
         from core.graph import Node
+
         now = int(time.time())
         convention_text = "never use raw threads, always use asyncio"
         node = Node(
@@ -330,8 +329,8 @@ class TestExtractionPerformance:
     @pytest.mark.slow
     def test_extraction_large_fixture_under_400ms(self) -> None:
         """Full extraction pipeline on a 497-event transcript under 400ms (warm model)."""
-        from core.extractor import _get_nlp
         from core.embedder import embed
+        from core.extractor import _get_nlp
 
         # warm both models before timing
         _get_nlp()
@@ -346,15 +345,16 @@ class TestExtractionPerformance:
 
         # 2000ms allows for test-environment overhead while still catching severe regressions.
         # The spec's 400ms target applies to production with pre-loaded sidecar models.
-        assert elapsed_ms < 2000, (
-            f"Extraction took {elapsed_ms:.1f}ms, exceeds 2000ms regression ceiling"
-        )
+        assert (
+            elapsed_ms < 2000
+        ), f"Extraction took {elapsed_ms:.1f}ms, exceeds 2000ms regression ceiling"
         assert len(candidates) >= 1
 
     @pytest.mark.slow
     def test_injection_200_nodes_under_100ms(self, mem_graph: Graph) -> None:
         """retrieve() + format on a 200-node graph under 100ms (warm model)."""
         import numpy as np
+
         from core.embedder import embed
         from core.graph import Node
 
@@ -391,7 +391,7 @@ class TestExtractionPerformance:
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         # 500ms allows for test-environment overhead; production target is 100ms.
-        assert elapsed_ms < 500, (
-            f"Retrieval took {elapsed_ms:.1f}ms, exceeds 500ms regression ceiling"
-        )
+        assert (
+            elapsed_ms < 500
+        ), f"Retrieval took {elapsed_ms:.1f}ms, exceeds 500ms regression ceiling"
         assert block
