@@ -16,6 +16,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `cortex bump <node-id> --by N` — manually increase a node's weight to reinforce retrieval priority
 - `graph.update_node_rationale(node_id, rationale)` — set or clear rationale on any node
 - `graph.set_node_weight(node_id, weight)` — set absolute weight on a node (floored at 0.0)
+- `cortex clean` CLI command — remove tier-1/2 nodes inactive for N days (`--days`, `--tier`, `--dry-run`)
+- `graph.get_stale_nodes(project, days, tier)` — find nodes inactive longer than threshold (excludes tier 3)
+- `graph.delete_nodes_bulk(node_ids)` — batch delete in a single SQL statement
 
 - `cortex export` CLI command — dump memory nodes to JSON or CSV for backup and inspection
 - `cortex import-` CLI command — restore nodes from a JSON export, recomputing embeddings from text
