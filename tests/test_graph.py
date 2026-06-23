@@ -795,3 +795,78 @@ class TestGetNodesBySource:
         graph.write_node(_make_node(dummy_embedding, text="other project", source="nlp", project="/other"))
         result = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# update_node_rationale
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateNodeRationale:
+    def test_sets_rationale_on_existing_node(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, rationale=None))
+        result = graph.update_node_rationale(nid, "because it avoids locks")
+        assert result is True
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.rationale == "because it avoids locks"
+
+    def test_clears_rationale_when_none(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, rationale="old reason"))
+        graph.update_node_rationale(nid, None)
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.rationale is None
+
+    def test_returns_false_for_unknown_id(self, graph: Graph) -> None:
+        result = graph.update_node_rationale("non-existent-uuid", "some reason")
+        assert result is False
+
+    def test_overwrites_existing_rationale(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, rationale="old"))
+        graph.update_node_rationale(nid, "new reason")
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.rationale == "new reason"
+
+
+# ---------------------------------------------------------------------------
+# set_node_weight
+# ---------------------------------------------------------------------------
+
+
+class TestSetNodeWeight:
+    def test_sets_weight_to_new_value(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, weight=1.0))
+        graph.set_node_weight(nid, 15.0)
+        node = graph.get_node(nid)
+        assert node is not None
+        assert abs(node.weight - 15.0) < 1e-6
+
+    def test_floors_at_zero_for_negative(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, weight=5.0))
+        graph.set_node_weight(nid, -3.0)
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.weight == 0.0
+
+    def test_returns_false_for_unknown_id(self, graph: Graph) -> None:
+        result = graph.set_node_weight("non-existent", 5.0)
+        assert result is False
+
+    def test_returns_true_on_success(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding))
+        result = graph.set_node_weight(nid, 7.5)
+        assert result is True
