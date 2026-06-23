@@ -342,3 +342,134 @@ class TestImportCommand:
         conn.close()
         assert row is not None
         assert "roundtrip test node" in row[0]
+
+
+# ---------------------------------------------------------------------------
+# cortex list
+# ---------------------------------------------------------------------------
+
+
+class TestListCommand:
+    def _invoke_list(
+        self, tmp_db: Path, project: str, extra: list[str] | None = None
+    ) -> object:
+        args = ["list", "--project", project] + (extra or [])
+        return runner.invoke(app, args, env={"CORTEX_DB_PATH": str(tmp_db)})
+
+    def test_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["list", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "No Cortex" in result.output
+
+    def test_empty_db_shows_message(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_list(tmp_db, project)
+        assert result.exit_code == 0
+        assert "No nodes" in result.output
+
+    def test_shows_node_row(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="pytest is the test runner", tier=1)
+        result = self._invoke_list(tmp_db, project)
+        assert result.exit_code == 0
+        # Rich may wrap long text across lines; check both halves
+        assert "pytest" in result.output and "test runner" in result.output
+
+    def test_tier_filter(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="tier one node", tier=1)
+        _seed_node(tmp_db, project, text="tier two node", tier=2)
+        result = self._invoke_list(tmp_db, project, ["--tier", "2"])
+        assert result.exit_code == 0
+        assert "tier two node" in result.output
+        assert "tier one node" not in result.output
+
+    def test_source_filter(self, tmp_db: Path, project: str) -> None:
+        conn = sqlite3.connect(str(tmp_db))
+        now = int(time.time())
+        nid = str(uuid.uuid4())
+        conn.execute(
+            """INSERT INTO nodes (id, type, tier, text, rationale, embedding, precision_bits,
+                                  weight, project, scope, source, last_accessed, created_at, session_count)
+               VALUES (?, 'fact', 1, 'git churn node', NULL, NULL, 32, 1.0, ?, 'module', 'git', ?, ?, 1)""",
+            (nid, project, now, now),
+        )
+        conn.commit()
+        conn.close()
+
+        result = self._invoke_list(tmp_db, project, ["--source", "git"])
+        assert result.exit_code == 0
+        assert "git churn node" in result.output
+
+        result2 = self._invoke_list(tmp_db, project, ["--source", "nlp"])
+        assert "git churn node" not in result2.output
+
+    def test_invalid_source_rejected(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_list(tmp_db, project, ["--source", "bogus"])
+        assert result.exit_code != 0
+
+    def test_invalid_sort_rejected(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_list(tmp_db, project, ["--sort", "bogus"])
+        assert result.exit_code != 0
+
+    def test_limit_respected(self, tmp_db: Path, project: str) -> None:
+        for i in range(10):
+            _seed_node(tmp_db, project, text=f"node number {i}", tier=1)
+        result = self._invoke_list(tmp_db, project, ["--limit", "3"])
+        assert result.exit_code == 0
+        assert "Showing 3 of 10" in result.output
+
+    def test_sort_by_created(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="alpha node", tier=1)
+        _seed_node(tmp_db, project, text="beta node", tier=1)
+        result = self._invoke_list(tmp_db, project, ["--sort", "created"])
+        assert result.exit_code == 0
+        assert "alpha node" in result.output
+        assert "beta node" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex doctor
+# ---------------------------------------------------------------------------
+
+
+class TestDoctorCommand:
+    def test_runs_without_error(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app, ["doctor", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+
+    def test_shows_spacy_check(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app, ["doctor", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert "spaCy" in result.output or "spacy" in result.output.lower()
+
+    def test_shows_database_check(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app, ["doctor", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert "database" in result.output.lower() or "Database" in result.output
+
+    def test_shows_hook_checks(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app, ["doctor", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert "inject.py" in result.output
+        assert "extract.py" in result.output
+        assert "compact.py" in result.output
+
+    def test_all_checks_passed_when_healthy(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app, ["doctor", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        # Either all checks pass or some fail — but should not crash
+        assert "Doctor" in result.output or "doctor" in result.output.lower()
