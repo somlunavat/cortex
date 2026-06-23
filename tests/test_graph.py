@@ -870,3 +870,124 @@ class TestSetNodeWeight:
         nid = graph.write_node(_make_node(dummy_embedding))
         result = graph.set_node_weight(nid, 7.5)
         assert result is True
+
+
+# ---------------------------------------------------------------------------
+# get_stale_nodes
+# ---------------------------------------------------------------------------
+
+
+class TestGetStaleNodes:
+    def test_returns_nodes_older_than_threshold(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_time = int(time.time()) - 10 * 86_400  # 10 days ago
+        node = _make_node(dummy_embedding, text="old node")
+        nid = graph.write_node(node)
+        graph._conn.execute(
+            "UPDATE nodes SET last_accessed = ? WHERE id = ?", (old_time, nid)
+        )
+        graph._conn.commit()
+
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        assert any(n.id == nid for n in stale)
+
+    def test_excludes_recently_accessed_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        recent_time = int(time.time()) - 2 * 86_400  # 2 days ago
+        node = _make_node(dummy_embedding, text="recent node")
+        nid = graph.write_node(node)
+        graph._conn.execute(
+            "UPDATE nodes SET last_accessed = ? WHERE id = ?", (recent_time, nid)
+        )
+        graph._conn.commit()
+
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        assert not any(n.id == nid for n in stale)
+
+    def test_excludes_tier_3_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_time = int(time.time()) - 30 * 86_400
+        node = _make_node(dummy_embedding, text="permanent node", tier=3)
+        nid = graph.write_node(node)
+        graph._conn.execute(
+            "UPDATE nodes SET last_accessed = ? WHERE id = ?", (old_time, nid)
+        )
+        graph._conn.commit()
+
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        assert not any(n.id == nid for n in stale)
+
+    def test_tier_filter_respected(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_time = int(time.time()) - 10 * 86_400
+        n1 = _make_node(dummy_embedding, text="tier1 old", tier=1)
+        n2 = _make_node(dummy_embedding, text="tier2 old", tier=2)
+        id1 = graph.write_node(n1)
+        id2 = graph.write_node(n2)
+        for nid in (id1, id2):
+            graph._conn.execute(
+                "UPDATE nodes SET last_accessed = ? WHERE id = ?", (old_time, nid)
+            )
+        graph._conn.commit()
+
+        tier1_stale = graph.get_stale_nodes(TEST_PROJECT, days=7, tier=1)
+        assert any(n.id == id1 for n in tier1_stale)
+        assert not any(n.id == id2 for n in tier1_stale)
+
+    def test_ordered_by_last_accessed_ascending(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        times = [
+            int(time.time()) - 20 * 86_400,
+            int(time.time()) - 15 * 86_400,
+            int(time.time()) - 10 * 86_400,
+        ]
+        for i, t in enumerate(times):
+            node = _make_node(dummy_embedding, text=f"old node {i}")
+            nid = graph.write_node(node)
+            graph._conn.execute(
+                "UPDATE nodes SET last_accessed = ? WHERE id = ?", (t, nid)
+            )
+        graph._conn.commit()
+
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        accessed = [n.last_accessed for n in stale]
+        assert accessed == sorted(accessed)
+
+    def test_empty_when_no_stale_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(dummy_embedding)
+        graph.write_node(node)
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        assert stale == []
+
+
+# ---------------------------------------------------------------------------
+# delete_nodes_bulk
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteNodesBulk:
+    def test_deletes_all_specified_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        ids = [graph.write_node(_make_node(dummy_embedding, text=f"node {i}")) for i in range(3)]
+        deleted = graph.delete_nodes_bulk(ids)
+        assert deleted == 3
+        for nid in ids:
+            assert graph.get_node(nid) is None
+
+    def test_empty_list_returns_zero(self, graph: Graph) -> None:
+        assert graph.delete_nodes_bulk([]) == 0
+
+    def test_partial_delete_returns_actual_count(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding))
+        deleted = graph.delete_nodes_bulk([nid, "nonexistent-uuid"])
+        assert deleted == 1

@@ -591,6 +591,59 @@ class Graph:
         self._conn.commit()
         return cursor.rowcount > 0
 
+    def get_stale_nodes(
+        self, project: str, days: int, tier: int | None = None
+    ) -> list[Node]:
+        """Return nodes that have not been accessed in at least `days` days.
+
+        Tier-3 (procedural) nodes are excluded from stale detection because
+        they are permanent and must be pruned explicitly via `cortex prune`.
+
+        Args:
+            project: Absolute project path.
+            days: Minimum inactivity threshold in days.
+            tier: If provided, restrict to this tier only. Tier 3 is always
+                excluded regardless of this parameter.
+
+        Returns:
+            List of stale Node objects ordered by last_accessed ascending
+            (least recently accessed first).
+        """
+        import time
+
+        cutoff = int(time.time()) - days * 86_400
+        if tier is not None and tier != 3:
+            rows = self._conn.execute(
+                "SELECT * FROM nodes WHERE project = ? AND tier = ? "
+                "AND last_accessed < ? ORDER BY last_accessed ASC",
+                (project, tier, cutoff),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM nodes WHERE project = ? AND tier < 3 "
+                "AND last_accessed < ? ORDER BY last_accessed ASC",
+                (project, cutoff),
+            ).fetchall()
+        return [_row_to_node(row) for row in rows]
+
+    def delete_nodes_bulk(self, node_ids: list[str]) -> int:
+        """Delete multiple nodes by ID in a single SQL statement.
+
+        Args:
+            node_ids: UUIDs to delete. Empty list is a safe no-op.
+
+        Returns:
+            Number of rows actually deleted.
+        """
+        if not node_ids:
+            return 0
+        placeholders = ",".join("?" * len(node_ids))
+        cursor = self._conn.execute(
+            f"DELETE FROM nodes WHERE id IN ({placeholders})", node_ids
+        )
+        self._conn.commit()
+        return cursor.rowcount
+
     def touch_nodes(self, node_ids: list[str], now: int) -> None:
         """Update last_accessed, bump weight, and increment session_count.
 

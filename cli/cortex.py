@@ -751,6 +751,61 @@ def bump(
     )
 
 
+@app.command()
+def clean(
+    days: int = typer.Option(7, "--days", "-d", help="Remove nodes inactive for at least this many days"),
+    tier: int = typer.Option(0, "--tier", "-t", help="Limit to a specific tier (0 = all non-tier-3)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed without deleting"),
+    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+) -> None:
+    """Remove stale tier-1 and tier-2 nodes that have not been accessed recently.
+
+    Tier-3 (procedural) nodes are never touched by this command; use
+    `cortex prune <id>` to remove them individually.
+
+    Use --dry-run to preview what would be deleted without committing.
+    """
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(0)
+
+    project = str(root)
+    stale = g.get_stale_nodes(project, days=days, tier=tier if tier else None)
+
+    if not stale:
+        console.print(f"[green]No stale nodes[/green] older than {days} days.")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Stale nodes (inactive > {days} days){' [DRY RUN]' if dry_run else ''}")
+    table.add_column("T", style="cyan", justify="center", width=3)
+    table.add_column("Last accessed", style="dim")
+    table.add_column("Weight", justify="right", width=7)
+    table.add_column("Text")
+    table.add_column("ID", style="dim", width=10)
+
+    for node in stale:
+        table.add_row(
+            str(node.tier),
+            _fmt_ts(node.last_accessed),
+            f"{node.weight:.2f}",
+            node.text[:60],
+            node.id[:8] + "…",
+        )
+
+    console.print(table)
+
+    if dry_run:
+        console.print(f"\n[dim]Dry run: {len(stale)} nodes would be removed.[/dim]")
+        raise typer.Exit(0)
+
+    typer.confirm(f"Delete {len(stale)} stale nodes?", abort=True)
+    deleted = g.delete_nodes_bulk([n.id for n in stale])
+    console.print(f"[green]Removed {deleted} stale nodes.[/green]")
+
+
 @app.command(name="list")
 def list_nodes(
     tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all)"),
