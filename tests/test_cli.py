@@ -623,3 +623,130 @@ class TestBumpCommand:
             env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
         )
         assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# cortex clean
+# ---------------------------------------------------------------------------
+
+
+def _seed_stale_node(
+    db_path: Path,
+    project: str,
+    text: str = "stale node",
+    tier: int = 1,
+    days_old: int = 10,
+) -> str:
+    """Insert a node with last_accessed set far in the past."""
+    conn = sqlite3.connect(str(db_path))
+    node_id = str(uuid.uuid4())
+    now = int(time.time())
+    old_time = now - days_old * 86_400
+    emb = np.random.default_rng(seed=7).random(384).astype(np.float32)
+    conn.execute(
+        """
+        INSERT INTO nodes (id, type, tier, text, rationale, embedding, precision_bits,
+                           weight, project, scope, source, last_accessed, created_at, session_count)
+        VALUES (?, 'observation', ?, ?, NULL, ?, 32, 0.8, ?, 'module', 'jsonl', ?, ?, 1)
+        """,
+        (node_id, tier, text, emb.tobytes(), project, old_time, now),
+    )
+    conn.commit()
+    conn.close()
+    return node_id
+
+
+class TestCleanCommand:
+    def _invoke_clean(
+        self, tmp_db: Path, project: str, extra: list[str] | None = None
+    ) -> object:
+        args = ["clean", "--project", project, "--yes"] + (extra or [])
+        return runner.invoke(
+            app, args, env={"CORTEX_DB_PATH": str(tmp_db)}, input="y\n"
+        )
+
+    def test_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["clean", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "No Cortex" in result.output
+
+    def test_no_stale_nodes_message(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="fresh node")
+        result = runner.invoke(
+            app,
+            ["clean", "--project", project, "--days", "7"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "No stale" in result.output
+
+    def test_dry_run_does_not_delete(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_stale_node(tmp_db, project, text="old observation", days_old=14)
+        result = runner.invoke(
+            app,
+            ["clean", "--project", project, "--days", "7", "--dry-run"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output or "dry run" in result.output.lower()
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT id FROM nodes WHERE id = ?", (nid,)).fetchone()
+        conn.close()
+        assert row is not None, "Dry run should not have deleted the node"
+
+    def test_deletes_stale_nodes(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_stale_node(tmp_db, project, text="old node", days_old=14)
+        result = runner.invoke(
+            app,
+            ["clean", "--project", project, "--days", "7"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+            input="y\n",
+        )
+        assert result.exit_code == 0
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT id FROM nodes WHERE id = ?", (nid,)).fetchone()
+        conn.close()
+        assert row is None, "Stale node should have been deleted"
+
+    def test_tier3_nodes_never_deleted(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_stale_node(tmp_db, project, text="permanent convention", tier=3, days_old=30)
+        result = runner.invoke(
+            app,
+            ["clean", "--project", project, "--days", "7"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+            input="y\n",
+        )
+        assert result.exit_code == 0
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT id FROM nodes WHERE id = ?", (nid,)).fetchone()
+        conn.close()
+        assert row is not None, "Tier-3 nodes must not be removed by clean"
+
+    def test_tier_filter_limits_scope(self, tmp_db: Path, project: str) -> None:
+        id1 = _seed_stale_node(tmp_db, project, text="tier1 stale", tier=1, days_old=10)
+        id2 = _seed_stale_node(tmp_db, project, text="tier2 stale", tier=2, days_old=10)
+        result = runner.invoke(
+            app,
+            ["clean", "--project", project, "--days", "7", "--tier", "1"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+            input="y\n",
+        )
+        assert result.exit_code == 0
+        conn = sqlite3.connect(str(tmp_db))
+        assert conn.execute("SELECT id FROM nodes WHERE id = ?", (id1,)).fetchone() is None
+        assert conn.execute("SELECT id FROM nodes WHERE id = ?", (id2,)).fetchone() is not None
+        conn.close()
+
+    def test_shows_stale_node_table(self, tmp_db: Path, project: str) -> None:
+        _seed_stale_node(tmp_db, project, text="stale table row", days_old=10)
+        result = runner.invoke(
+            app,
+            ["clean", "--project", project, "--days", "7", "--dry-run"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "stale table row" in result.output
