@@ -56,32 +56,65 @@ def _fmt_ts(ts: int | None) -> str:
 
 
 @app.command()
-def status() -> None:
-    """Show node counts by tier, last session, and token savings."""
-    root = _project_root()
-    graph = open_graph(root)
+def status(
+    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+) -> None:
+    """Show node counts by tier, type distribution, source breakdown, and last session."""
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
 
-    if graph is None:
+    if g is None:
         console.print("[yellow]No Cortex database found in this project.[/yellow]")
         raise typer.Exit(0)
 
     project = str(root)
-    nodes = graph.get_all_nodes(project=project)
 
-    tier_counts = {1: 0, 2: 0, 3: 0}
-    for node in nodes:
-        tier_counts[node.tier] = tier_counts.get(node.tier, 0) + 1
+    # Tier table with avg weight
+    tier_rows = g._conn.execute(
+        "SELECT tier, COUNT(*) AS cnt, AVG(weight) AS avg_w "
+        "FROM nodes WHERE project = ? GROUP BY tier",
+        (project,),
+    ).fetchall()
+    tier_map = {r["tier"]: (r["cnt"], r["avg_w"] or 0.0) for r in tier_rows}
+    tier_labels = {1: "Ephemeral", 2: "Semantic", 3: "Procedural"}
 
-    table = Table(title=f"Cortex — {project}")
-    table.add_column("Tier", style="cyan")
-    table.add_column("Label")
-    table.add_column("Nodes", justify="right")
-    table.add_row("1", "Ephemeral", str(tier_counts[1]))
-    table.add_row("2", "Semantic", str(tier_counts[2]))
-    table.add_row("3", "Procedural", str(tier_counts[3]))
-    console.print(table)
+    tier_table = Table(title=f"Cortex — {project}")
+    tier_table.add_column("Tier", style="cyan")
+    tier_table.add_column("Label")
+    tier_table.add_column("Nodes", justify="right")
+    tier_table.add_column("Avg weight", justify="right")
+    for t in (1, 2, 3):
+        cnt, avg_w = tier_map.get(t, (0, 0.0))
+        tier_table.add_row(str(t), tier_labels[t], str(cnt), f"{avg_w:.2f}")
+    console.print(tier_table)
 
-    row = graph._conn.execute(
+    # Type distribution
+    type_rows = g._conn.execute(
+        "SELECT type, COUNT(*) AS cnt FROM nodes WHERE project = ? GROUP BY type ORDER BY cnt DESC",
+        (project,),
+    ).fetchall()
+    if type_rows:
+        type_table = Table(title="Node types")
+        type_table.add_column("Type", style="dim")
+        type_table.add_column("Count", justify="right")
+        for r in type_rows:
+            type_table.add_row(r["type"], str(r["cnt"]))
+        console.print(type_table)
+
+    # Source breakdown
+    src_rows = g._conn.execute(
+        "SELECT source, COUNT(*) AS cnt FROM nodes WHERE project = ? GROUP BY source ORDER BY cnt DESC",
+        (project,),
+    ).fetchall()
+    if src_rows:
+        src_table = Table(title="Extraction sources")
+        src_table.add_column("Source", style="dim")
+        src_table.add_column("Nodes", justify="right")
+        for r in src_rows:
+            src_table.add_row(r["source"], str(r["cnt"]))
+        console.print(src_table)
+
+    row = g._conn.execute(
         "SELECT ended_at, nodes_written, nodes_evicted, nodes_promoted, "
         "tokens_raw, tokens_injected "
         "FROM sessions WHERE project = ? ORDER BY ended_at DESC LIMIT 1",
@@ -96,6 +129,56 @@ def status() -> None:
         if row["tokens_raw"] and row["tokens_injected"]:
             saved = row["tokens_raw"] - row["tokens_injected"]
             console.print(f"  Tokens saved:    {saved}")
+
+
+@app.command()
+def recent(
+    limit: int = typer.Option(10, "--limit", "-n", help="Number of nodes to show"),
+    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+) -> None:
+    """Show the most recently accessed memory nodes.
+
+    Useful after a session to see what Cortex surfaced to Claude.
+    """
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(0)
+
+    project = str(root)
+    rows = g._conn.execute(
+        "SELECT id, type, tier, text, weight, source, last_accessed "
+        "FROM nodes WHERE project = ? ORDER BY last_accessed DESC LIMIT ?",
+        (project, limit),
+    ).fetchall()
+
+    if not rows:
+        console.print("[dim]No nodes found.[/dim]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Recently accessed — {project}")
+    table.add_column("Accessed", style="cyan", no_wrap=True)
+    table.add_column("T", justify="center", width=3)
+    table.add_column("Type", style="dim", width=12)
+    table.add_column("Src", style="dim", width=5)
+    table.add_column("Weight", justify="right", width=7)
+    table.add_column("Text")
+    table.add_column("ID", style="dim", width=10)
+
+    for row in rows:
+        table.add_row(
+            _fmt_ts(row["last_accessed"]),
+            str(row["tier"]),
+            row["type"],
+            row["source"],
+            f"{row['weight']:.2f}",
+            row["text"][:60],
+            row["id"][:8] + "…",
+        )
+
+    console.print(table)
 
 
 @app.command()

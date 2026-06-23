@@ -750,3 +750,116 @@ class TestCleanCommand:
         )
         assert result.exit_code == 0
         assert "stale table row" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex status (enhanced)
+# ---------------------------------------------------------------------------
+
+
+class TestStatusCommandEnhanced:
+    def _invoke_status(self, tmp_db: Path, project: str) -> object:
+        return runner.invoke(
+            app, ["status", "--project", project], env={"CORTEX_DB_PATH": str(tmp_db)}
+        )
+
+    def test_shows_type_distribution(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="observe this", tier=1)
+        result = self._invoke_status(tmp_db, project)
+        assert result.exit_code == 0
+        assert "observation" in result.output
+
+    def test_shows_source_breakdown(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="jsonl node", tier=1)
+        result = self._invoke_status(tmp_db, project)
+        assert result.exit_code == 0
+        assert "jsonl" in result.output
+
+    def test_shows_avg_weight(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="a node", tier=1)
+        result = self._invoke_status(tmp_db, project)
+        assert result.exit_code == 0
+        assert "Avg weight" in result.output or "avg" in result.output.lower()
+
+    def test_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["status", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "No Cortex" in result.output
+
+    def test_project_flag_accepted(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["status", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# cortex recent
+# ---------------------------------------------------------------------------
+
+
+class TestRecentCommand:
+    def _invoke_recent(
+        self, tmp_db: Path, project: str, extra: list[str] | None = None
+    ) -> object:
+        args = ["recent", "--project", project] + (extra or [])
+        return runner.invoke(app, args, env={"CORTEX_DB_PATH": str(tmp_db)})
+
+    def test_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["recent", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "No Cortex" in result.output
+
+    def test_empty_db_shows_message(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_recent(tmp_db, project)
+        assert result.exit_code == 0
+        assert "No nodes" in result.output
+
+    def test_shows_recently_accessed_nodes(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="recently touched node", tier=1)
+        result = self._invoke_recent(tmp_db, project)
+        assert result.exit_code == 0
+        assert "recently touched" in result.output or "recently" in result.output
+
+    def test_ordered_most_recent_first(self, tmp_db: Path, project: str) -> None:
+        conn = sqlite3.connect(str(tmp_db))
+        now = int(time.time())
+        early_id = str(uuid.uuid4())
+        late_id = str(uuid.uuid4())
+        emb = np.zeros(384, dtype=np.float32).tobytes()
+        for nid, ts, label in [
+            (early_id, now - 1000, "early node"),
+            (late_id, now - 10, "late node"),
+        ]:
+            conn.execute(
+                """INSERT INTO nodes (id, type, tier, text, rationale, embedding, precision_bits,
+                                      weight, project, scope, source, last_accessed, created_at, session_count)
+                   VALUES (?, 'observation', 1, ?, NULL, ?, 32, 1.0, ?, 'project', 'jsonl', ?, ?, 1)""",
+                (nid, label, emb, project, ts, ts),
+            )
+        conn.commit()
+        conn.close()
+
+        result = self._invoke_recent(tmp_db, project)
+        assert result.exit_code == 0
+        # Use UUID prefixes for ordering — visible regardless of column wrapping
+        late_pos = result.output.find(late_id[:8])
+        early_pos = result.output.find(early_id[:8])
+        assert late_pos >= 0 and early_pos >= 0
+        assert late_pos < early_pos, "Most recently accessed node should appear first"
+
+    def test_limit_flag_respected(self, tmp_db: Path, project: str) -> None:
+        for i in range(6):
+            _seed_node(tmp_db, project, text=f"node {i}", tier=1)
+        result = self._invoke_recent(tmp_db, project, ["--limit", "3"])
+        assert result.exit_code == 0

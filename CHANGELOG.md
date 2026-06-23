@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `cortex recent` CLI command — show the most recently accessed nodes, ordered by `last_accessed` DESC
+- `cortex status` now shows node type distribution and extraction source breakdown tables, and accepts `--project` flag
 - `cortex list` CLI command — paginated node table with `--tier`, `--type`, `--source`, `--sort`, `--limit` filters
 - `cortex doctor` CLI command — health check for spaCy model, sentence-transformers, tiktoken, SQLite schema, hook scripts, and plugin manifest
 - `cortex pin <node-id>` — force a node to tier 3 (permanent memory, never decayed)
