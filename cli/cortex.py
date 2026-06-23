@@ -637,6 +637,120 @@ def import_(
     )
 
 
+@app.command()
+def pin(
+    node_id: str = typer.Argument(..., help="Node UUID to pin to tier 3"),
+    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+) -> None:
+    """Permanently pin a node to tier 3 (procedural memory).
+
+    Tier-3 nodes are never decayed or evicted by the automatic scheduler.
+    Embedding precision is downcast to 2 bits on promotion.
+    """
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(1)
+
+    target = g.get_node(node_id)
+    if target is None:
+        console.print(f"[red]Node not found:[/red] {node_id}")
+        raise typer.Exit(1)
+
+    if target.tier == 3:
+        console.print(f"[dim]Node {node_id[:8]}… is already tier 3.[/dim]")
+        raise typer.Exit(0)
+
+    import time as _time
+    import numpy as np
+    from core.embedder import serialize
+
+    now = int(_time.time())
+    new_blob = None
+    if target.embedding is not None:
+        new_blob = serialize(target.embedding.astype(np.float32), 2)
+
+    g.update_node_tier(
+        node_id=node_id,
+        new_tier=3,
+        new_precision=2,
+        embedding_blob=new_blob,
+        now=now,
+    )
+    console.print(
+        f"[green]Pinned to tier 3:[/green] {node_id[:8]}… — {target.text[:60]}"
+    )
+
+
+@app.command()
+def annotate(
+    node_id: str = typer.Argument(..., help="Node UUID to annotate"),
+    rationale: str = typer.Option(..., "--rationale", "-r", help="Rationale text to set"),
+    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+) -> None:
+    """Set or update the rationale for a node.
+
+    The rationale is injected alongside the node text so Claude sees the
+    'why' behind a convention or decision.
+    """
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(1)
+
+    target = g.get_node(node_id)
+    if target is None:
+        console.print(f"[red]Node not found:[/red] {node_id}")
+        raise typer.Exit(1)
+
+    updated = g.update_node_rationale(node_id, rationale.strip() or None)
+    if updated:
+        console.print(f"[green]Rationale updated for[/green] {node_id[:8]}…")
+        console.print(f"  [dim]{rationale[:120]}[/dim]")
+    else:
+        console.print(f"[red]Failed to update node:[/red] {node_id}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def bump(
+    node_id: str = typer.Argument(..., help="Node UUID to bump"),
+    amount: float = typer.Option(1.0, "--by", help="Amount to add to the node weight"),
+    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+) -> None:
+    """Increase a node's weight to reinforce its retrieval priority.
+
+    Useful for manually signalling that a node is important without waiting
+    for automatic access-based weighting.
+    """
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(1)
+
+    target = g.get_node(node_id)
+    if target is None:
+        console.print(f"[red]Node not found:[/red] {node_id}")
+        raise typer.Exit(1)
+
+    if amount <= 0:
+        console.print("[red]--by must be a positive number.[/red]")
+        raise typer.Exit(1)
+
+    g.update_weight(node_id, delta=amount)
+    new_weight = target.weight + amount
+    console.print(
+        f"[green]Weight bumped[/green] {node_id[:8]}… "
+        f"[dim]{target.weight:.2f} → {new_weight:.2f}[/dim]"
+    )
+
+
 @app.command(name="list")
 def list_nodes(
     tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all)"),

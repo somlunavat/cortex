@@ -473,3 +473,153 @@ class TestDoctorCommand:
         assert result.exit_code == 0
         # Either all checks pass or some fail — but should not crash
         assert "Doctor" in result.output or "doctor" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# cortex pin
+# ---------------------------------------------------------------------------
+
+
+class TestPinCommand:
+    def _invoke_pin(self, tmp_db: Path, project: str, node_id: str) -> object:
+        return runner.invoke(
+            app,
+            ["pin", node_id, "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+
+    def test_pin_promotes_to_tier_3(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_node(tmp_db, project, text="use WAL mode", tier=1)
+        result = self._invoke_pin(tmp_db, project, nid)
+        assert result.exit_code == 0
+        assert "Pinned" in result.output
+
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT tier FROM nodes WHERE id = ?", (nid,)).fetchone()
+        conn.close()
+        assert row[0] == 3
+
+    def test_pin_already_tier_3_is_noop(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_node(tmp_db, project, text="permanent convention", tier=3)
+        result = self._invoke_pin(tmp_db, project, nid)
+        assert result.exit_code == 0
+        assert "already tier 3" in result.output
+
+    def test_pin_unknown_node_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_pin(tmp_db, project, "00000000-0000-0000-0000-000000000000")
+        assert result.exit_code != 0
+
+    def test_pin_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["pin", "any-id", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# cortex annotate
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotateCommand:
+    def _invoke_annotate(
+        self, tmp_db: Path, project: str, node_id: str, rationale: str
+    ) -> object:
+        return runner.invoke(
+            app,
+            ["annotate", node_id, "--rationale", rationale, "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+
+    def test_annotate_sets_rationale(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_node(tmp_db, project, text="always use ruff")
+        result = self._invoke_annotate(tmp_db, project, nid, "keeps formatting consistent")
+        assert result.exit_code == 0
+        assert "updated" in result.output.lower()
+
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT rationale FROM nodes WHERE id = ?", (nid,)).fetchone()
+        conn.close()
+        assert row[0] == "keeps formatting consistent"
+
+    def test_annotate_overwrites_existing(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_node(tmp_db, project, text="mypy strict mode")
+        self._invoke_annotate(tmp_db, project, nid, "old reason")
+        self._invoke_annotate(tmp_db, project, nid, "new reason")
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT rationale FROM nodes WHERE id = ?", (nid,)).fetchone()
+        conn.close()
+        assert row[0] == "new reason"
+
+    def test_annotate_unknown_node_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_annotate(tmp_db, project, "no-such-id", "reason")
+        assert result.exit_code != 0
+
+    def test_annotate_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["annotate", "any-id", "--rationale", "r", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# cortex bump
+# ---------------------------------------------------------------------------
+
+
+class TestBumpCommand:
+    def _invoke_bump(
+        self, tmp_db: Path, project: str, node_id: str, by: float | None = None
+    ) -> object:
+        args = ["bump", node_id, "--project", project]
+        if by is not None:
+            args += ["--by", str(by)]
+        return runner.invoke(app, args, env={"CORTEX_DB_PATH": str(tmp_db)})
+
+    def test_bump_increases_weight(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_node(tmp_db, project, text="important node")
+        conn = sqlite3.connect(str(tmp_db))
+        before = conn.execute("SELECT weight FROM nodes WHERE id = ?", (nid,)).fetchone()[0]
+        conn.close()
+
+        result = self._invoke_bump(tmp_db, project, nid, by=2.0)
+        assert result.exit_code == 0
+
+        conn = sqlite3.connect(str(tmp_db))
+        after = conn.execute("SELECT weight FROM nodes WHERE id = ?", (nid,)).fetchone()[0]
+        conn.close()
+        assert abs(after - (before + 2.0)) < 1e-6
+
+    def test_bump_default_amount_is_one(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_node(tmp_db, project, text="another node")
+        conn = sqlite3.connect(str(tmp_db))
+        before = conn.execute("SELECT weight FROM nodes WHERE id = ?", (nid,)).fetchone()[0]
+        conn.close()
+
+        self._invoke_bump(tmp_db, project, nid)
+
+        conn = sqlite3.connect(str(tmp_db))
+        after = conn.execute("SELECT weight FROM nodes WHERE id = ?", (nid,)).fetchone()[0]
+        conn.close()
+        assert abs(after - (before + 1.0)) < 1e-6
+
+    def test_bump_unknown_node_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_bump(tmp_db, project, "no-such-id")
+        assert result.exit_code != 0
+
+    def test_bump_negative_amount_rejected(self, tmp_db: Path, project: str) -> None:
+        nid = _seed_node(tmp_db, project, text="test node")
+        result = self._invoke_bump(tmp_db, project, nid, by=-1.0)
+        assert result.exit_code != 0
+
+    def test_bump_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["bump", "any-id", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code != 0
