@@ -7,9 +7,11 @@ Commands:
     prune     — manually evict a node by id
     reset     — wipe all nodes for a project
     search    — BM25 text search across memory nodes
+    list      — paginated table of all memory nodes with filters
     decay     — run decay/eviction/promotion manually
     install   — write plugin.json to Claude Code plugins directory
     dashboard — start the dashboard server on port 7000
+    doctor    — verify that all Cortex dependencies are healthy
 """
 
 from __future__ import annotations
@@ -633,6 +635,182 @@ def import_(
         f"[green]Imported {imported} nodes[/green] "
         f"({skipped} skipped) into {project}"
     )
+
+
+@app.command(name="list")
+def list_nodes(
+    tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all)"),
+    node_type: str = typer.Option("", "--type", help="Filter by type: observation, fact, convention, error"),
+    source: str = typer.Option("", "--source", "-s", help="Filter by source: jsonl, ast, git, nlp"),
+    sort: str = typer.Option("weight", "--sort", help="Sort by: weight, created, accessed"),
+    limit: int = typer.Option(25, "--limit", "-n", help="Maximum nodes to show"),
+    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+) -> None:
+    """List memory nodes in a paginated table with optional filters."""
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(0)
+
+    project = str(root)
+    valid_types = {"observation", "fact", "convention", "error"}
+    valid_sources = {"jsonl", "ast", "git", "nlp"}
+    valid_sorts = {"weight", "created", "accessed"}
+
+    if node_type and node_type not in valid_types:
+        console.print(f"[red]Invalid type '{node_type}'. Choose from: {', '.join(sorted(valid_types))}[/red]")
+        raise typer.Exit(1)
+    if source and source not in valid_sources:
+        console.print(f"[red]Invalid source '{source}'. Choose from: {', '.join(sorted(valid_sources))}[/red]")
+        raise typer.Exit(1)
+    if sort not in valid_sorts:
+        console.print(f"[red]Invalid sort '{sort}'. Choose from: {', '.join(sorted(valid_sorts))}[/red]")
+        raise typer.Exit(1)
+
+    sort_col = {"weight": "weight", "created": "created_at", "accessed": "last_accessed"}[sort]
+
+    clauses = ["project = ?"]
+    params: list = [project]
+    if tier:
+        clauses.append("tier = ?")
+        params.append(tier)
+    if node_type:
+        clauses.append("type = ?")
+        params.append(node_type)
+    if source:
+        clauses.append("source = ?")
+        params.append(source)
+
+    where = " AND ".join(clauses)
+    rows = g._conn.execute(
+        f"SELECT id, type, tier, text, weight, session_count, source, created_at "
+        f"FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?",
+        params + [limit],
+    ).fetchall()
+
+    total = g._conn.execute(
+        f"SELECT COUNT(*) FROM nodes WHERE {where}", params
+    ).fetchone()[0]
+
+    if not rows:
+        console.print("[dim]No nodes found.[/dim]")
+        raise typer.Exit(0)
+
+    title = f"Nodes — {project}"
+    if any([tier, node_type, source]):
+        parts = []
+        if tier:
+            parts.append(f"tier={tier}")
+        if node_type:
+            parts.append(f"type={node_type}")
+        if source:
+            parts.append(f"source={source}")
+        title += f" [{', '.join(parts)}]"
+
+    table = Table(title=title)
+    table.add_column("T", style="cyan", justify="center", width=3)
+    table.add_column("Type", style="dim", width=12)
+    table.add_column("Src", style="dim", width=5)
+    table.add_column("Weight", justify="right", width=7)
+    table.add_column("Sess", justify="right", width=5)
+    table.add_column("Text")
+    table.add_column("ID", style="dim", width=10)
+
+    for row in rows:
+        table.add_row(
+            str(row["tier"]),
+            row["type"],
+            row["source"],
+            f"{row['weight']:.2f}",
+            str(row["session_count"]),
+            row["text"][:72],
+            row["id"][:8] + "…",
+        )
+
+    console.print(table)
+    if total > limit:
+        console.print(f"[dim]Showing {limit} of {total} nodes. Use --limit to see more.[/dim]")
+
+
+@app.command()
+def doctor(
+    project_path: str = typer.Option("", "--project", help="Project path (defaults to CWD)"),
+) -> None:
+    """Verify that all Cortex runtime dependencies are healthy.
+
+    Checks: spaCy model, sentence-transformers, SQLite schema, hook scripts,
+    and the Claude Code plugin manifest.
+    """
+    root = Path(project_path) if project_path else _project_root()
+    hooks_dir = Path(__file__).parent.parent / "hooks"
+    plugin_path = Path.home() / ".claude" / "plugins" / "cortex.json"
+
+    all_ok = True
+
+    def check(label: str, ok: bool, detail: str = "") -> None:
+        nonlocal all_ok
+        icon = "[green]✓[/green]" if ok else "[red]✗[/red]"
+        msg = f"  {icon}  {label}"
+        if detail:
+            msg += f"  [dim]{detail}[/dim]"
+        console.print(msg)
+        if not ok:
+            all_ok = False
+
+    console.print("\n[bold]Cortex Doctor[/bold]\n")
+
+    # spaCy model
+    try:
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+        check("spaCy en_core_web_sm", True, f"v{nlp.meta.get('version', '?')}")
+    except Exception as exc:
+        check("spaCy en_core_web_sm", False, f"{exc}")
+
+    # sentence-transformers
+    try:
+        from sentence_transformers import SentenceTransformer
+        SentenceTransformer.__new__(SentenceTransformer)  # don't load model, just import
+        check("sentence-transformers", True, "import OK")
+    except Exception as exc:
+        check("sentence-transformers", False, str(exc))
+
+    # tiktoken
+    try:
+        import tiktoken
+        tiktoken.get_encoding("cl100k_base")
+        check("tiktoken cl100k_base", True, "encoding loaded")
+    except Exception as exc:
+        check("tiktoken cl100k_base", False, str(exc))
+
+    # SQLite schema
+    db_exists = open_graph(root) is not None
+    check(
+        "Cortex database",
+        db_exists,
+        str(root / ".cortex" / "cortex.db") if db_exists else "not found (run a session first)",
+    )
+
+    # Hook scripts
+    for hook_name in ("inject.py", "extract.py", "compact.py"):
+        path = hooks_dir / hook_name
+        check(f"Hook: {hook_name}", path.exists(), str(path) if path.exists() else "missing")
+
+    # Plugin manifest
+    check(
+        "Plugin manifest",
+        plugin_path.exists(),
+        str(plugin_path) if plugin_path.exists() else "not installed — run: cortex install",
+    )
+
+    console.print()
+    if all_ok:
+        console.print("[green bold]All checks passed.[/green bold]")
+    else:
+        console.print("[yellow]Some checks failed. See details above.[/yellow]")
+    console.print()
 
 
 @app.command()
