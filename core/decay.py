@@ -86,16 +86,15 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
         graph.update_weight(node.id, delta=delta)
         decayed += 1
 
-        # Re-read the updated weight for eviction / promotion checks
-        current_weight = max(0.0, node.weight + delta)
+        decayed_weight = max(0.0, node.weight + delta)
 
         # Eviction
-        if node.tier == 1 and current_weight < TIER1_EVICTION_THRESHOLD:
+        if node.tier == 1 and decayed_weight < TIER1_EVICTION_THRESHOLD:
             graph.delete_node(node.id)
             evicted += 1
             continue
 
-        if node.tier == 2 and current_weight < TIER2_EVICTION_THRESHOLD:
+        if node.tier == 2 and decayed_weight < TIER2_EVICTION_THRESHOLD:
             graph.delete_node(node.id)
             evicted += 1
             continue
@@ -103,7 +102,7 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
         # Promotion checks
         if node.tier == 1:
             if (
-                current_weight >= TIER1_PROMOTION_WEIGHT
+                decayed_weight >= TIER1_PROMOTION_WEIGHT
                 and node.session_count >= TIER1_PROMOTION_SESSIONS
             ):
                 _promote_node(graph, node, new_tier=2, new_precision=8, now=now)
@@ -112,7 +111,7 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
         elif node.tier == 2:
             age_days = (now - node.created_at) / SECONDS_PER_DAY
             if (
-                current_weight >= TIER2_PROMOTION_WEIGHT
+                decayed_weight >= TIER2_PROMOTION_WEIGHT
                 and node.session_count >= TIER2_PROMOTION_SESSIONS
                 and age_days >= TIER2_PROMOTION_AGE_DAYS
             ):

@@ -292,10 +292,10 @@ def _tree_sitter_diff(before: str, after: str, language: str) -> list[dict[str, 
     return changes
 
 
-def _extract_function_names(node: Any) -> set[str]:
-    """Recursively extract all function/method definition names from an AST node."""
+def _extract_names_by_type(node: Any, node_types: frozenset[str]) -> set[str]:
+    """Recursively collect identifier names for AST nodes matching node_types."""
     names: set[str] = set()
-    if node.type in ("function_definition", "async_function_definition"):
+    if node.type in node_types:
         for child in node.children:
             if child.type == "identifier":
                 names.add(
@@ -303,23 +303,22 @@ def _extract_function_names(node: Any) -> set[str]:
                 )
                 break
     for child in node.children:
-        names |= _extract_function_names(child)
+        names |= _extract_names_by_type(child, node_types)
     return names
+
+
+_FUNCTION_NODE_TYPES = frozenset({"function_definition", "async_function_definition"})
+_CLASS_NODE_TYPES = frozenset({"class_definition"})
+
+
+def _extract_function_names(node: Any) -> set[str]:
+    """Recursively extract all function/method definition names from an AST node."""
+    return _extract_names_by_type(node, _FUNCTION_NODE_TYPES)
 
 
 def _extract_class_names(node: Any) -> set[str]:
     """Recursively extract all class definition names from an AST node."""
-    names: set[str] = set()
-    if node.type == "class_definition":
-        for child in node.children:
-            if child.type == "identifier":
-                names.add(
-                    child.text.decode() if isinstance(child.text, bytes) else child.text
-                )
-                break
-    for child in node.children:
-        names |= _extract_class_names(child)
-    return names
+    return _extract_names_by_type(node, _CLASS_NODE_TYPES)
 
 
 def _format_ast_change(change: dict[str, Any], rel_path: str) -> str:
