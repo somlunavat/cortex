@@ -175,7 +175,7 @@ def ast_channel(touched_files: list[Path], project: str) -> list[CandidateNode]:
             continue
         try:
             changes = _diff_file_ast(file_path, project)
-        except Exception as exc:
+        except (OSError, ValueError, UnicodeDecodeError, AttributeError) as exc:
             logger.debug("AST diff failed for %s: %s", file_path, exc)
             continue
         for change in changes:
@@ -456,13 +456,13 @@ _CONVENTION_MARKERS: frozenset[str] = frozenset(
         "everywhere",
     }
 )
-_RETRACTION_PATTERNS: list[str] = [
-    r"actually\s+let['']?s?\s+not",
-    r"actually,?\s+let['']?s?\s+not",
-    r"let['']?s?\s+not\s+use\s+that",
-    r"on\s+second\s+thought",
-    r"never\s+mind",
-    r"disregard\s+that",
+_RETRACTION_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"actually\s+let['']?s?\s+not"),
+    re.compile(r"actually,?\s+let['']?s?\s+not"),
+    re.compile(r"let['']?s?\s+not\s+use\s+that"),
+    re.compile(r"on\s+second\s+thought"),
+    re.compile(r"never\s+mind"),
+    re.compile(r"disregard\s+that"),
 ]
 _SPLIT_CONJUNCTIONS: frozenset[str] = frozenset({"because", "since", "as", "so that"})
 
@@ -477,7 +477,7 @@ def _get_nlp() -> Any:
             import spacy
 
             _nlp = spacy.load("en_core_web_sm")
-        except Exception as exc:
+        except (ImportError, OSError) as exc:
             logger.warning("spaCy model not available: %s; NLP channel disabled", exc)
             _nlp = False
     return _nlp if _nlp is not False else None
@@ -486,7 +486,7 @@ def _get_nlp() -> Any:
 def _is_retracted(text: str) -> bool:
     """Return True if the text contains a retraction marker."""
     lower = text.lower()
-    return any(re.search(pat, lower) for pat in _RETRACTION_PATTERNS)
+    return any(pat.search(lower) for pat in _RETRACTION_PATTERNS)
 
 
 def _is_decision_sentence(sent: Any) -> bool:
