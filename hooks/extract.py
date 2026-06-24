@@ -39,11 +39,7 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
     if not transcript_path.exists():
         return 0
 
-    existing = graph._conn.execute(
-        "SELECT id FROM sessions WHERE transcript_path = ?",
-        (str(transcript_path),),
-    ).fetchone()
-    if existing:
+    if graph.session_exists(str(transcript_path)):
         return 0
 
     events = list(parse_transcript(transcript_path))

@@ -10,6 +10,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
 
 import numpy as np
 
@@ -655,3 +656,200 @@ class Graph:
         sql = f"UPDATE nodes SET last_accessed = ?, weight = weight + 0.1, session_count = session_count + 1 WHERE id IN ({placeholders})"  # nosec B608
         self._conn.execute(sql, [now, *node_ids])
         self._conn.commit()
+
+    # ---------------------------------------------------------------------------
+    # Query helpers — keep all SQL inside this class
+    # ---------------------------------------------------------------------------
+
+    def session_exists(self, transcript_path: str) -> bool:
+        """Return True if this transcript has already been processed.
+
+        Args:
+            transcript_path: Absolute path to the JSONL transcript file.
+        """
+        row = self._conn.execute(
+            "SELECT id FROM sessions WHERE transcript_path = ?",
+            (transcript_path,),
+        ).fetchone()
+        return row is not None
+
+    def get_tier_counts(self, project: str) -> dict[int, tuple[int, float]]:
+        """Return {tier: (count, avg_weight)} for all tiers in a project.
+
+        Args:
+            project: Absolute project path.
+        """
+        rows = self._conn.execute(
+            "SELECT tier, COUNT(*) AS cnt, AVG(weight) AS avg_w "
+            "FROM nodes WHERE project = ? GROUP BY tier",
+            (project,),
+        ).fetchall()
+        return {int(r["tier"]): (int(r["cnt"]), float(r["avg_w"] or 0.0)) for r in rows}
+
+    def get_type_counts(self, project: str) -> list[tuple[str, int]]:
+        """Return [(type, count)] ordered by count DESC for a project.
+
+        Args:
+            project: Absolute project path.
+        """
+        rows = self._conn.execute(
+            "SELECT type, COUNT(*) AS cnt FROM nodes "
+            "WHERE project = ? GROUP BY type ORDER BY cnt DESC",
+            (project,),
+        ).fetchall()
+        return [(str(r["type"]), int(r["cnt"])) for r in rows]
+
+    def get_source_counts(self, project: str) -> list[tuple[str, int]]:
+        """Return [(source, count)] ordered by count DESC for a project.
+
+        Args:
+            project: Absolute project path.
+        """
+        rows = self._conn.execute(
+            "SELECT source, COUNT(*) AS cnt FROM nodes "
+            "WHERE project = ? GROUP BY source ORDER BY cnt DESC",
+            (project,),
+        ).fetchall()
+        return [(str(r["source"]), int(r["cnt"])) for r in rows]
+
+    def get_last_session(self, project: str) -> dict[str, Any] | None:
+        """Return the most recent session record for a project, or None.
+
+        Args:
+            project: Absolute project path.
+        """
+        row = self._conn.execute(
+            "SELECT ended_at, nodes_written, nodes_evicted, nodes_promoted, "
+            "tokens_raw, tokens_injected "
+            "FROM sessions WHERE project = ? ORDER BY ended_at DESC LIMIT 1",
+            (project,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def get_recent_nodes(self, project: str, limit: int = 10) -> list[Node]:
+        """Return nodes ordered by last_accessed DESC.
+
+        Args:
+            project: Absolute project path.
+            limit: Maximum number of nodes to return.
+        """
+        rows = self._conn.execute(
+            "SELECT id, type, tier, text, rationale, embedding, precision_bits, "
+            "weight, project, scope, source, last_accessed, created_at, session_count "
+            "FROM nodes WHERE project = ? ORDER BY last_accessed DESC LIMIT ?",
+            (project, limit),
+        ).fetchall()
+        return [_row_to_node(row) for row in rows]
+
+    def get_session_records(
+        self, project: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Return recent session records ordered by ended_at DESC.
+
+        Args:
+            project: Absolute project path.
+            limit: Maximum number of sessions to return.
+        """
+        rows = self._conn.execute(
+            "SELECT id, started_at, ended_at, nodes_written, nodes_evicted, "
+            "nodes_promoted, tokens_raw, tokens_injected, transcript_path "
+            "FROM sessions WHERE project = ? ORDER BY ended_at DESC LIMIT ?",
+            (project, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_aggregate_stats(self, project: str) -> dict[str, Any]:
+        """Return aggregate session and node stats for a project.
+
+        Args:
+            project: Absolute project path.
+        """
+        agg = self._conn.execute(
+            """
+            SELECT
+                COUNT(*)              AS session_count,
+                SUM(nodes_written)    AS total_written,
+                SUM(nodes_evicted)    AS total_evicted,
+                SUM(nodes_promoted)   AS total_promoted,
+                SUM(CASE WHEN tokens_raw IS NOT NULL AND tokens_injected IS NOT NULL
+                         THEN tokens_raw - tokens_injected ELSE 0 END) AS total_saved,
+                MIN(started_at)       AS first_session,
+                MAX(ended_at)         AS last_session
+            FROM sessions
+            WHERE project = ?
+            """,
+            (project,),
+        ).fetchone()
+        tier_counts = dict(
+            self._conn.execute(
+                "SELECT tier, COUNT(*) FROM nodes WHERE project = ? GROUP BY tier",
+                (project,),
+            ).fetchall()
+        )
+        return {
+            "session_count": agg["session_count"] or 0,
+            "total_written": agg["total_written"] or 0,
+            "total_evicted": agg["total_evicted"] or 0,
+            "total_promoted": agg["total_promoted"] or 0,
+            "total_saved": agg["total_saved"] or 0,
+            "first_session": agg["first_session"],
+            "last_session": agg["last_session"],
+            "tier_counts": {int(k): int(v) for k, v in tier_counts.items()},
+        }
+
+    def query_nodes_page(
+        self,
+        project: str,
+        *,
+        tier: int | None = None,
+        node_type: str | None = None,
+        source: str | None = None,
+        sort_col: str = "weight",
+        limit: int = 25,
+    ) -> tuple[list[Node], int]:
+        """Return a page of nodes matching the given filters plus the total count.
+
+        ``sort_col`` must be a valid column name from the allowlist
+        ``{"weight", "created_at", "last_accessed"}``; the caller is responsible
+        for validating it before calling this method.
+
+        Args:
+            project: Absolute project path.
+            tier: If set, only return nodes in this tier.
+            node_type: If set, only return nodes of this type.
+            source: If set, only return nodes with this extraction source.
+            sort_col: Column to sort by (must be pre-validated by caller).
+            limit: Maximum nodes to return.
+
+        Returns:
+            (nodes, total_count) where total_count may be > len(nodes).
+        """
+        allowed_sort = {"weight", "created_at", "last_accessed"}
+        if sort_col not in allowed_sort:
+            raise ValueError(
+                f"sort_col must be one of {allowed_sort}, got {sort_col!r}"
+            )
+
+        clauses = ["project = ?"]
+        params: list[object] = [project]
+        if tier is not None:
+            clauses.append("tier = ?")
+            params.append(tier)
+        if node_type is not None:
+            clauses.append("type = ?")
+            params.append(node_type)
+        if source is not None:
+            clauses.append("source = ?")
+            params.append(source)
+
+        where = " AND ".join(clauses)
+        rows = self._conn.execute(  # nosec B608
+            f"SELECT id, type, tier, text, rationale, embedding, precision_bits, "
+            f"weight, project, scope, source, last_accessed, created_at, session_count "
+            f"FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?",
+            [*params, limit],
+        ).fetchall()
+        total: int = self._conn.execute(  # nosec B608
+            f"SELECT COUNT(*) FROM nodes WHERE {where}", params
+        ).fetchone()[0]
+        return [_row_to_node(row) for row in rows], total

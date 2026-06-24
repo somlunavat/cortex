@@ -72,13 +72,7 @@ def status(
 
     project = str(root)
 
-    # Tier table with avg weight
-    tier_rows = g._conn.execute(
-        "SELECT tier, COUNT(*) AS cnt, AVG(weight) AS avg_w "
-        "FROM nodes WHERE project = ? GROUP BY tier",
-        (project,),
-    ).fetchall()
-    tier_map = {r["tier"]: (r["cnt"], r["avg_w"] or 0.0) for r in tier_rows}
+    tier_map = g.get_tier_counts(project)
     tier_labels = {1: "Ephemeral", 2: "Semantic", 3: "Procedural"}
 
     tier_table = Table(title=f"Cortex — {project}")
@@ -91,46 +85,32 @@ def status(
         tier_table.add_row(str(t), tier_labels[t], str(cnt), f"{avg_w:.2f}")
     console.print(tier_table)
 
-    # Type distribution
-    type_rows = g._conn.execute(
-        "SELECT type, COUNT(*) AS cnt FROM nodes WHERE project = ? GROUP BY type ORDER BY cnt DESC",
-        (project,),
-    ).fetchall()
-    if type_rows:
+    type_pairs = g.get_type_counts(project)
+    if type_pairs:
         type_table = Table(title="Node types")
         type_table.add_column("Type", style="dim")
         type_table.add_column("Count", justify="right")
-        for r in type_rows:
-            type_table.add_row(r["type"], str(r["cnt"]))
+        for typ, cnt in type_pairs:
+            type_table.add_row(typ, str(cnt))
         console.print(type_table)
 
-    # Source breakdown
-    src_rows = g._conn.execute(
-        "SELECT source, COUNT(*) AS cnt FROM nodes WHERE project = ? GROUP BY source ORDER BY cnt DESC",
-        (project,),
-    ).fetchall()
-    if src_rows:
+    src_pairs = g.get_source_counts(project)
+    if src_pairs:
         src_table = Table(title="Extraction sources")
         src_table.add_column("Source", style="dim")
         src_table.add_column("Nodes", justify="right")
-        for r in src_rows:
-            src_table.add_row(r["source"], str(r["cnt"]))
+        for src, cnt in src_pairs:
+            src_table.add_row(src, str(cnt))
         console.print(src_table)
 
-    row = g._conn.execute(
-        "SELECT ended_at, nodes_written, nodes_evicted, nodes_promoted, "
-        "tokens_raw, tokens_injected "
-        "FROM sessions WHERE project = ? ORDER BY ended_at DESC LIMIT 1",
-        (project,),
-    ).fetchone()
-
-    if row:
-        console.print(f"\nLast session: [green]{_fmt_ts(row['ended_at'])}[/green]")
-        console.print(f"  Nodes written:   {row['nodes_written']}")
-        console.print(f"  Nodes evicted:   {row['nodes_evicted']}")
-        console.print(f"  Nodes promoted:  {row['nodes_promoted'] or 0}")
-        if row["tokens_raw"] and row["tokens_injected"]:
-            saved = row["tokens_raw"] - row["tokens_injected"]
+    last = g.get_last_session(project)
+    if last:
+        console.print(f"\nLast session: [green]{_fmt_ts(last['ended_at'])}[/green]")
+        console.print(f"  Nodes written:   {last['nodes_written']}")
+        console.print(f"  Nodes evicted:   {last['nodes_evicted']}")
+        console.print(f"  Nodes promoted:  {last['nodes_promoted'] or 0}")
+        if last["tokens_raw"] and last["tokens_injected"]:
+            saved = int(last["tokens_raw"]) - int(last["tokens_injected"])
             console.print(f"  Tokens saved:    {saved}")
 
 
@@ -153,13 +133,9 @@ def recent(
         raise typer.Exit(0)
 
     project = str(root)
-    rows = g._conn.execute(
-        "SELECT id, type, tier, text, weight, source, last_accessed "
-        "FROM nodes WHERE project = ? ORDER BY last_accessed DESC LIMIT ?",
-        (project, limit),
-    ).fetchall()
+    nodes = g.get_recent_nodes(project, limit=limit)
 
-    if not rows:
+    if not nodes:
         console.print("[dim]No nodes found.[/dim]")
         raise typer.Exit(0)
 
@@ -172,15 +148,15 @@ def recent(
     table.add_column("Text")
     table.add_column("ID", style="dim", width=10)
 
-    for row in rows:
+    for node in nodes:
         table.add_row(
-            _fmt_ts(row["last_accessed"]),
-            str(row["tier"]),
-            row["type"],
-            row["source"],
-            f"{row['weight']:.2f}",
-            row["text"][:60],
-            row["id"][:8] + "…",
+            _fmt_ts(node.last_accessed),
+            str(node.tier),
+            node.type,
+            node.source,
+            f"{node.weight:.2f}",
+            node.text[:60],
+            node.id[:8] + "…",
         )
 
     console.print(table)
@@ -525,17 +501,7 @@ def sessions(
         console.print("[yellow]No Cortex database found.[/yellow]")
         raise typer.Exit(0)
 
-    rows = g._conn.execute(
-        """
-        SELECT id, started_at, ended_at, nodes_written, nodes_evicted,
-               nodes_promoted, tokens_raw, tokens_injected, transcript_path
-        FROM sessions
-        WHERE project = ?
-        ORDER BY ended_at DESC
-        LIMIT ?
-        """,
-        (str(root), limit),
-    ).fetchall()
+    rows = g.get_session_records(str(root), limit=limit)
 
     if not rows:
         console.print("[dim]No sessions recorded for this project.[/dim]")
@@ -581,47 +547,25 @@ def stats(
 
     project = str(root)
 
-    agg = g._conn.execute(
-        """
-        SELECT
-            COUNT(*)              AS session_count,
-            SUM(nodes_written)    AS total_written,
-            SUM(nodes_evicted)    AS total_evicted,
-            SUM(nodes_promoted)   AS total_promoted,
-            SUM(CASE WHEN tokens_raw IS NOT NULL AND tokens_injected IS NOT NULL
-                     THEN tokens_raw - tokens_injected ELSE 0 END) AS total_saved,
-            MIN(started_at)       AS first_session,
-            MAX(ended_at)         AS last_session
-        FROM sessions
-        WHERE project = ?
-        """,
-        (project,),
-    ).fetchone()
-
-    tier_counts = dict(
-        g._conn.execute(
-            "SELECT tier, COUNT(*) FROM nodes WHERE project = ? GROUP BY tier",
-            (project,),
-        ).fetchall()
-    )
-
+    agg = g.get_aggregate_stats(project)
+    tier_counts: dict[int, int] = agg["tier_counts"]
     node_total = sum(tier_counts.values())
 
     table = Table(title=f"Aggregate stats — {project}")
     table.add_column("Metric", style="cyan")
     table.add_column("Value", justify="right")
 
-    table.add_row("Sessions recorded", str(agg["session_count"] or 0))
+    table.add_row("Sessions recorded", str(agg["session_count"]))
     table.add_row("First session", _fmt_ts(agg["first_session"]))
     table.add_row("Last session", _fmt_ts(agg["last_session"]))
     table.add_row("Nodes total", str(node_total))
     table.add_row("  Tier 1 (ephemeral)", str(tier_counts.get(1, 0)))
     table.add_row("  Tier 2 (semantic)", str(tier_counts.get(2, 0)))
     table.add_row("  Tier 3 (procedural)", str(tier_counts.get(3, 0)))
-    table.add_row("Nodes written (all time)", str(agg["total_written"] or 0))
-    table.add_row("Nodes evicted (all time)", str(agg["total_evicted"] or 0))
-    table.add_row("Nodes promoted (all time)", str(agg["total_promoted"] or 0))
-    table.add_row("Total tokens saved", str(agg["total_saved"] or 0))
+    table.add_row("Nodes written (all time)", str(agg["total_written"]))
+    table.add_row("Nodes evicted (all time)", str(agg["total_evicted"]))
+    table.add_row("Nodes promoted (all time)", str(agg["total_promoted"]))
+    table.add_row("Total tokens saved", str(agg["total_saved"]))
 
     console.print(table)
 
@@ -981,30 +925,16 @@ def list_nodes(
         "accessed": "last_accessed",
     }[sort]
 
-    clauses = ["project = ?"]
-    params: list[Any] = [project]
-    if tier:
-        clauses.append("tier = ?")
-        params.append(tier)
-    if node_type:
-        clauses.append("type = ?")
-        params.append(node_type)
-    if source:
-        clauses.append("source = ?")
-        params.append(source)
+    nodes_page, total = g.query_nodes_page(
+        project,
+        tier=tier or None,
+        node_type=node_type or None,
+        source=source or None,
+        sort_col=sort_col,
+        limit=limit,
+    )
 
-    where = " AND ".join(clauses)
-    rows = g._conn.execute(
-        f"SELECT id, type, tier, text, weight, session_count, source, created_at "  # nosec B608
-        f"FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?",  # nosec B608
-        [*params, limit],
-    ).fetchall()
-
-    total = g._conn.execute(
-        f"SELECT COUNT(*) FROM nodes WHERE {where}", params  # nosec B608
-    ).fetchone()[0]
-
-    if not rows:
+    if not nodes_page:
         console.print("[dim]No nodes found.[/dim]")
         raise typer.Exit(0)
 
@@ -1028,15 +958,15 @@ def list_nodes(
     table.add_column("Text")
     table.add_column("ID", style="dim", width=10)
 
-    for row in rows:
+    for node in nodes_page:
         table.add_row(
-            str(row["tier"]),
-            row["type"],
-            row["source"],
-            f"{row['weight']:.2f}",
-            str(row["session_count"]),
-            row["text"][:72],
-            row["id"][:8] + "…",
+            str(node.tier),
+            node.type,
+            node.source,
+            f"{node.weight:.2f}",
+            str(node.session_count),
+            node.text[:72],
+            node.id[:8] + "…",
         )
 
     console.print(table)
