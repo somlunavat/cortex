@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import sqlite3
 import sys
 import time
 import uuid
@@ -117,7 +118,7 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
         id_a = file_node_ids.get(rel_a)
         id_b = file_node_ids.get(rel_b)
         if id_a and id_b and id_a != id_b:
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(ValueError, sqlite3.IntegrityError):
                 graph.write_edge(id_a, id_b)
 
     decay_result = run_decay(graph, project)

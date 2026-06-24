@@ -28,10 +28,9 @@ def _get_model() -> object | None:
     _model_loaded = True
     try:
         from sentence_transformers import SentenceTransformer
-
         _model = SentenceTransformer(_MODEL_NAME)
         logger.debug("Loaded embedding model %s", _MODEL_NAME)
-    except Exception as exc:
+    except (ImportError, OSError, RuntimeError) as exc:
         logger.warning("Could not load embedding model: %s; using zero vectors", exc)
         _model = None
     return _model
@@ -59,7 +58,6 @@ def embed_batch(texts: list[str]) -> list[np.ndarray]:
 
     try:
         from sentence_transformers import SentenceTransformer
-
         assert isinstance(model, SentenceTransformer)
         results = model.encode(texts, convert_to_numpy=True, batch_size=64)
         out: list[np.ndarray] = []
@@ -69,7 +67,7 @@ def embed_batch(texts: list[str]) -> list[np.ndarray]:
                 arr = arr.squeeze().astype(np.float32)
             out.append(arr)
         return out
-    except Exception as exc:
+    except (RuntimeError, ValueError, AssertionError) as exc:
         logger.warning("Batch embedding failed: %s; using zero vectors", exc)
         return [np.zeros(_EMBEDDING_DIM, dtype=np.float32) for _ in texts]
 
@@ -91,14 +89,13 @@ def embed(text: str) -> np.ndarray:
         return np.zeros(_EMBEDDING_DIM, dtype=np.float32)
     try:
         from sentence_transformers import SentenceTransformer
-
         assert isinstance(model, SentenceTransformer)
         result = model.encode(text, convert_to_numpy=True)
         arr = np.asarray(result, dtype=np.float32)
         if arr.ndim > 1:
             return arr.squeeze().astype(np.float32)
         return arr
-    except Exception as exc:
+    except (RuntimeError, ValueError, AssertionError) as exc:
         logger.warning("Embedding failed for text %r: %s", text[:40], exc)
         return np.zeros(_EMBEDDING_DIM, dtype=np.float32)
 

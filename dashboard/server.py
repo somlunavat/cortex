@@ -8,6 +8,7 @@ WebSocket endpoint pushes graph snapshots to connected browsers.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import sqlite3
@@ -64,17 +65,18 @@ def api_status() -> dict[str, Any]:
     if conn is None:
         return {"project": project, "db_exists": False}
 
-    tier_counts = dict(
-        conn.execute(
-            "SELECT tier, COUNT(*) FROM nodes WHERE project = ? GROUP BY tier",
-            (project,),
-        ).fetchall()
-    )
+    with contextlib.closing(conn):
+        tier_counts = dict(
+            conn.execute(
+                "SELECT tier, COUNT(*) FROM nodes WHERE project = ? GROUP BY tier",
+                (project,),
+            ).fetchall()
+        )
 
-    last_session = conn.execute(
-        "SELECT * FROM sessions WHERE project = ? ORDER BY ended_at DESC LIMIT 1",
-        (project,),
-    ).fetchone()
+        last_session = conn.execute(
+            "SELECT * FROM sessions WHERE project = ? ORDER BY ended_at DESC LIMIT 1",
+            (project,),
+        ).fetchone()
 
     result: dict[str, Any] = {
         "project": project,
@@ -85,7 +87,6 @@ def api_status() -> dict[str, Any]:
     if last_session:
         result["last_session"] = dict(last_session)
 
-    conn.close()
     return result
 
 
@@ -100,22 +101,22 @@ def api_nodes(
     if conn is None:
         return []
 
-    if tier is not None:
-        rows = conn.execute(
-            "SELECT id, type, tier, text, rationale, weight, scope, source, "
-            "last_accessed, created_at, session_count, precision_bits "
-            "FROM nodes WHERE project = ? AND tier = ?",
-            (str(root), tier),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT id, type, tier, text, rationale, weight, scope, source, "
-            "last_accessed, created_at, session_count, precision_bits "
-            "FROM nodes WHERE project = ?",
-            (str(root),),
-        ).fetchall()
+    with contextlib.closing(conn):
+        if tier is not None:
+            rows = conn.execute(
+                "SELECT id, type, tier, text, rationale, weight, scope, source, "
+                "last_accessed, created_at, session_count, precision_bits "
+                "FROM nodes WHERE project = ? AND tier = ?",
+                (str(root), tier),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, type, tier, text, rationale, weight, scope, source, "
+                "last_accessed, created_at, session_count, precision_bits "
+                "FROM nodes WHERE project = ?",
+                (str(root),),
+            ).fetchall()
 
-    conn.close()
     return [dict(row) for row in rows]
 
 
@@ -127,17 +128,17 @@ def api_edges(project: str = "") -> list[dict[str, Any]]:
     if conn is None:
         return []
 
-    rows = conn.execute(
-        """
-        SELECT e.source_id, e.target_id, e.strength, e.last_seen
-        FROM edges e
-        JOIN nodes n ON n.id = e.source_id
-        WHERE n.project = ?
-        """,
-        (str(root),),
-    ).fetchall()
+    with contextlib.closing(conn):
+        rows = conn.execute(
+            """
+            SELECT e.source_id, e.target_id, e.strength, e.last_seen
+            FROM edges e
+            JOIN nodes n ON n.id = e.source_id
+            WHERE n.project = ?
+            """,
+            (str(root),),
+        ).fetchall()
 
-    conn.close()
     return [dict(row) for row in rows]
 
 
@@ -149,14 +150,14 @@ def api_sessions(project: str = "", limit: int = 50) -> list[dict[str, Any]]:
     if conn is None:
         return []
 
-    rows = conn.execute(
-        "SELECT id, project, started_at, ended_at, nodes_written, nodes_evicted, "
-        "nodes_promoted, tokens_raw, tokens_injected FROM sessions WHERE project = ? "
-        "ORDER BY ended_at DESC LIMIT ?",
-        (str(root), limit),
-    ).fetchall()
+    with contextlib.closing(conn):
+        rows = conn.execute(
+            "SELECT id, project, started_at, ended_at, nodes_written, nodes_evicted, "
+            "nodes_promoted, tokens_raw, tokens_injected FROM sessions WHERE project = ? "
+            "ORDER BY ended_at DESC LIMIT ?",
+            (str(root), limit),
+        ).fetchall()
 
-    conn.close()
     return [dict(row) for row in rows]
 
 

@@ -17,7 +17,7 @@ def db() -> Generator[sqlite3.Connection, None, None]:
     """In-memory SQLite connection with schema applied."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    schema = Path("schema.sql").read_text()
+    schema = (Path(__file__).parent.parent / "schema.sql").read_text()
     conn.executescript(schema)
     yield conn
     conn.close()
