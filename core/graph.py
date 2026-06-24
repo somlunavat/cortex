@@ -843,13 +843,8 @@ class Graph:
             params.append(source)
 
         where = " AND ".join(clauses)
-        rows = self._conn.execute(  # nosec B608
-            f"SELECT id, type, tier, text, rationale, embedding, precision_bits, "
-            f"weight, project, scope, source, last_accessed, created_at, session_count "
-            f"FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?",
-            [*params, limit],
-        ).fetchall()
-        total: int = self._conn.execute(  # nosec B608
-            f"SELECT COUNT(*) FROM nodes WHERE {where}", params
-        ).fetchone()[0]
+        page_sql = f"SELECT id, type, tier, text, rationale, embedding, precision_bits, weight, project, scope, source, last_accessed, created_at, session_count FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?"  # nosec B608
+        count_sql = f"SELECT COUNT(*) FROM nodes WHERE {where}"  # nosec B608
+        rows = self._conn.execute(page_sql, [*params, limit]).fetchall()
+        total: int = self._conn.execute(count_sql, params).fetchone()[0]
         return [_row_to_node(row) for row in rows], total

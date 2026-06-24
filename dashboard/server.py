@@ -182,7 +182,7 @@ class _ConnectionManager:
         for ws in self.active:
             try:
                 await ws.send_text(data)
-            except Exception:
+            except (RuntimeError, WebSocketDisconnect):
                 dead.append(ws)
         for ws in dead:
             self.active.remove(ws)
