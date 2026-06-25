@@ -240,6 +240,11 @@ class Graph:
             List of Node objects with similarity >= threshold, ordered by
             descending similarity, capped at limit.
         """
+        if not (0.0 <= threshold <= 1.0):
+            raise ValueError(f"threshold must be in [0.0, 1.0], got {threshold}")
+        if limit < 1:
+            raise ValueError(f"limit must be >= 1, got {limit}")
+
         rows = self._conn.execute(
             "SELECT * FROM nodes WHERE project = ? AND embedding IS NOT NULL",
             (project,),
@@ -330,11 +335,13 @@ class Graph:
     def delete_node(self, node_id: str) -> None:
         """Delete a node and all its edges (CASCADE).
 
-        Silently does nothing if the node does not exist.
+        Silently does nothing if the node does not exist or if node_id is empty.
 
         Args:
             node_id: UUID of the node to delete.
         """
+        if not node_id:
+            return
         self._conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
         self._conn.commit()
 
@@ -505,7 +512,16 @@ class Graph:
             transcript_path: Path to the JSONL transcript file.
             tokens_raw: Total tokens across all project node texts (no budget).
             tokens_injected: Tokens in the budget-constrained injection block.
+
+        Raises:
+            ValueError: If ended_at < started_at or any count is negative.
         """
+        if ended_at < started_at:
+            raise ValueError(
+                f"ended_at ({ended_at}) must not be before started_at ({started_at})"
+            )
+        if nodes_written < 0 or nodes_evicted < 0 or nodes_promoted < 0:
+            raise ValueError("node counts must be non-negative")
         self._conn.execute(
             """
             INSERT INTO sessions (
