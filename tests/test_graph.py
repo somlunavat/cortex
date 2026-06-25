@@ -1004,3 +1004,282 @@ class TestDeleteNodesBulk:
         nid = graph.write_node(_make_node(dummy_embedding))
         deleted = graph.delete_nodes_bulk([nid, "nonexistent-uuid"])
         assert deleted == 1
+
+
+# ---------------------------------------------------------------------------
+# session_exists
+# ---------------------------------------------------------------------------
+
+
+class TestSessionExists:
+    def test_returns_false_when_no_sessions(self, graph: Graph) -> None:
+        assert graph.session_exists("/tmp/nonexistent.jsonl") is False
+
+    def test_returns_true_after_write_session(self, graph: Graph) -> None:
+        path = "/tmp/test_session.jsonl"
+        now = int(time.time())
+        graph.write_session(
+            session_id="test-session-id",
+            project=TEST_PROJECT,
+            started_at=now - 60,
+            ended_at=now,
+            nodes_written=1,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path=path,
+        )
+        assert graph.session_exists(path) is True
+
+    def test_different_path_returns_false(self, graph: Graph) -> None:
+        path = "/tmp/session_a.jsonl"
+        now = int(time.time())
+        graph.write_session(
+            session_id="test-session-id",
+            project=TEST_PROJECT,
+            started_at=now - 60,
+            ended_at=now,
+            nodes_written=0,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path=path,
+        )
+        assert graph.session_exists("/tmp/session_b.jsonl") is False
+
+
+# ---------------------------------------------------------------------------
+# get_tier_counts
+# ---------------------------------------------------------------------------
+
+
+class TestGetTierCounts:
+    def test_empty_graph_returns_empty_dict(self, graph: Graph) -> None:
+        assert graph.get_tier_counts(TEST_PROJECT) == {}
+
+    def test_counts_match_written_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="t1a", tier=1))
+        graph.write_node(_make_node(dummy_embedding, text="t1b", tier=1))
+        graph.write_node(_make_node(dummy_embedding, text="t2a", tier=2))
+        counts = graph.get_tier_counts(TEST_PROJECT)
+        assert counts[1] == (2, pytest.approx(1.0))
+        assert counts[2] == (1, pytest.approx(1.0))
+        assert 3 not in counts
+
+    def test_scoped_to_project(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        graph.write_node(
+            _make_node(dummy_embedding, text="proj1", project=TEST_PROJECT)
+        )
+        graph.write_node(
+            _make_node(dummy_embedding, text="proj2", project="/other/project")
+        )
+        counts = graph.get_tier_counts(TEST_PROJECT)
+        total = sum(c for c, _ in counts.values())
+        assert total == 1
+
+
+# ---------------------------------------------------------------------------
+# get_type_counts / get_source_counts
+# ---------------------------------------------------------------------------
+
+
+class TestGetTypeCounts:
+    def test_returns_types_ordered_by_count(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(3):
+            graph.write_node(
+                _make_node(dummy_embedding, text=f"obs{i}", node_type="observation")
+            )
+        graph.write_node(_make_node(dummy_embedding, text="fact1", node_type="fact"))
+        pairs = graph.get_type_counts(TEST_PROJECT)
+        assert pairs[0] == ("observation", 3)
+        assert pairs[1] == ("fact", 1)
+
+    def test_empty_returns_empty_list(self, graph: Graph) -> None:
+        assert graph.get_type_counts(TEST_PROJECT) == []
+
+
+class TestGetSourceCounts:
+    def test_groups_by_source(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="j1", source="jsonl"))
+        graph.write_node(_make_node(dummy_embedding, text="j2", source="jsonl"))
+        graph.write_node(_make_node(dummy_embedding, text="n1", source="nlp"))
+        pairs = graph.get_source_counts(TEST_PROJECT)
+        assert pairs[0] == ("jsonl", 2)
+        assert pairs[1] == ("nlp", 1)
+
+
+# ---------------------------------------------------------------------------
+# get_last_session
+# ---------------------------------------------------------------------------
+
+
+class TestGetLastSession:
+    def test_returns_none_when_no_sessions(self, graph: Graph) -> None:
+        assert graph.get_last_session(TEST_PROJECT) is None
+
+    def test_returns_most_recent_session(self, graph: Graph) -> None:
+        now = int(time.time())
+        for i, ended in enumerate([now - 200, now - 100, now - 50]):
+            graph.write_session(
+                session_id=f"sess-{i}",
+                project=TEST_PROJECT,
+                started_at=ended - 60,
+                ended_at=ended,
+                nodes_written=i,
+                nodes_evicted=0,
+                nodes_promoted=0,
+                transcript_path=f"/tmp/t{i}.jsonl",
+            )
+        last = graph.get_last_session(TEST_PROJECT)
+        assert last is not None
+        assert last["ended_at"] == now - 50
+
+    def test_scoped_to_project(self, graph: Graph) -> None:
+        now = int(time.time())
+        graph.write_session(
+            session_id="other-sess",
+            project="/other/project",
+            started_at=now - 60,
+            ended_at=now,
+            nodes_written=5,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="/tmp/other.jsonl",
+        )
+        assert graph.get_last_session(TEST_PROJECT) is None
+
+
+# ---------------------------------------------------------------------------
+# get_recent_nodes
+# ---------------------------------------------------------------------------
+
+
+class TestGetRecentNodes:
+    def test_ordered_by_last_accessed_desc(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        now = int(time.time())
+        for i in range(3):
+            node = _make_node(dummy_embedding, text=f"node {i}")
+            node_id = graph.write_node(node)
+            # Manually set different last_accessed values
+            graph._conn.execute(
+                "UPDATE nodes SET last_accessed = ? WHERE id = ?",
+                (now - (3 - i) * 100, node_id),
+            )
+            graph._conn.commit()
+        recent = graph.get_recent_nodes(TEST_PROJECT, limit=3)
+        assert len(recent) == 3
+        assert recent[0].text == "node 2"
+        assert recent[1].text == "node 1"
+
+    def test_limit_respected(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        for i in range(5):
+            graph.write_node(_make_node(dummy_embedding, text=f"node {i}"))
+        assert len(graph.get_recent_nodes(TEST_PROJECT, limit=2)) == 2
+
+    def test_empty_graph_returns_empty(self, graph: Graph) -> None:
+        assert graph.get_recent_nodes(TEST_PROJECT) == []
+
+
+# ---------------------------------------------------------------------------
+# get_aggregate_stats
+# ---------------------------------------------------------------------------
+
+
+class TestGetAggregateStats:
+    def test_all_zeros_for_empty_graph(self, graph: Graph) -> None:
+        agg = graph.get_aggregate_stats(TEST_PROJECT)
+        assert agg["session_count"] == 0
+        assert agg["total_written"] == 0
+        assert agg["tier_counts"] == {}
+
+    def test_accumulates_across_sessions(self, graph: Graph) -> None:
+        now = int(time.time())
+        for i in range(3):
+            graph.write_session(
+                session_id=f"s{i}",
+                project=TEST_PROJECT,
+                started_at=now - 60,
+                ended_at=now - i,
+                nodes_written=2,
+                nodes_evicted=1,
+                nodes_promoted=0,
+                transcript_path=f"/tmp/s{i}.jsonl",
+            )
+        agg = graph.get_aggregate_stats(TEST_PROJECT)
+        assert agg["session_count"] == 3
+        assert agg["total_written"] == 6
+        assert agg["total_evicted"] == 3
+
+    def test_tier_counts_reflect_graph(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="t1", tier=1))
+        graph.write_node(_make_node(dummy_embedding, text="t3", tier=3))
+        agg = graph.get_aggregate_stats(TEST_PROJECT)
+        tier_counts: dict[int, int] = agg["tier_counts"]
+        assert tier_counts[1] == 1
+        assert tier_counts[3] == 1
+
+
+# ---------------------------------------------------------------------------
+# query_nodes_page
+# ---------------------------------------------------------------------------
+
+
+class TestQueryNodesPage:
+    def test_returns_all_when_no_filters(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(4):
+            graph.write_node(_make_node(dummy_embedding, text=f"node {i}"))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT)
+        assert total == 4
+        assert len(nodes) == 4
+
+    def test_tier_filter(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="t1", tier=1))
+        graph.write_node(_make_node(dummy_embedding, text="t2", tier=2))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT, tier=1)
+        assert total == 1
+        assert nodes[0].tier == 1
+
+    def test_type_filter(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        graph.write_node(
+            _make_node(dummy_embedding, text="obs", node_type="observation")
+        )
+        graph.write_node(_make_node(dummy_embedding, text="fact", node_type="fact"))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT, node_type="observation")
+        assert total == 1
+        assert nodes[0].type == "observation"
+
+    def test_limit_respected(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        for i in range(10):
+            graph.write_node(_make_node(dummy_embedding, text=f"n{i}", weight=float(i)))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT, limit=3)
+        assert total == 10
+        assert len(nodes) == 3
+
+    def test_invalid_sort_col_raises(self, graph: Graph) -> None:
+        with pytest.raises(ValueError, match="sort_col"):
+            graph.query_nodes_page(TEST_PROJECT, sort_col="injected_column")
+
+    def test_combined_type_and_source_filter(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(
+                dummy_embedding, text="a", node_type="observation", source="jsonl"
+            )
+        )
+        graph.write_node(
+            _make_node(dummy_embedding, text="b", node_type="fact", source="nlp")
+        )
+        nodes, total = graph.query_nodes_page(
+            TEST_PROJECT, node_type="observation", source="jsonl"
+        )
+        assert total == 1
+        assert nodes[0].text == "a"
