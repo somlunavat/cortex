@@ -98,7 +98,7 @@ def bm25_channel(
     """
     tokens = query.lower().split()
     raw = index.get_scores(tokens)
-    max_score = float(np.max(raw)) if len(raw) > 0 else 0.0
+    max_score = float(np.max(raw)) if raw.size > 0 else 0.0
     results: list[ScoredNode] = []
     for i, node in enumerate(nodes):
         score = float(raw[i]) / max_score if max_score > 0.0 else 0.0
@@ -202,13 +202,8 @@ def _get_tokenizer() -> tiktoken.Encoding:
     return tiktoken.get_encoding("cl100k_base")
 
 
-def _count_tokens(text: str) -> int:
-    """Count cl100k_base tokens in a string."""
-    return len(_get_tokenizer().encode(text))
-
-
 def count_tokens(text: str) -> int:
-    """Count cl100k_base tokens in a string (public API).
+    """Count cl100k_base tokens in a string.
 
     Args:
         text: Input string to tokenize.
@@ -216,7 +211,7 @@ def count_tokens(text: str) -> int:
     Returns:
         Number of cl100k_base tokens.
     """
-    return _count_tokens(text)
+    return len(_get_tokenizer().encode(text))
 
 
 def _enforce_budget(
@@ -242,14 +237,14 @@ def _enforce_budget(
     tier3_ids = {n.id for n in tier3}
 
     for node in tier3:
-        tokens = _count_tokens(node.text)
+        tokens = count_tokens(node.text)
         result.append(node)
         used_tokens += tokens
 
     for sn in fused_candidates:
         if sn.node.id in tier3_ids:
             continue
-        tokens = _count_tokens(sn.node.text)
+        tokens = count_tokens(sn.node.text)
         if used_tokens + tokens <= budget_tokens:
             result.append(sn.node)
             used_tokens += tokens
@@ -350,7 +345,7 @@ def format_injection_block(
             lines.append(line)
 
     body = "\n".join(lines)
-    token_count = _count_tokens(body)
+    token_count = count_tokens(body)
     footer = (
         f"\n=== END CORTEX MEMORY (tokens: {token_count} / budget: {budget_tokens}) ==="
     )
