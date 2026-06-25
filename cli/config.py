@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from core.graph import Graph
@@ -34,7 +37,13 @@ def db_path(project_root: Path) -> Path:
     """
     override = os.environ.get("CORTEX_DB_PATH", "")
     if override:
-        return Path(override)
+        override_path = Path(override)
+        if not override_path.is_absolute():
+            raise ValueError(
+                f"CORTEX_DB_PATH must be an absolute path, got: {override!r}"
+            )
+        logger.warning("CORTEX_DB_PATH override active: %s", override_path)
+        return override_path
     return cortex_dir(project_root) / DB_FILE_NAME
 
 
