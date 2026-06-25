@@ -171,7 +171,7 @@ def _compute_token_stats(graph: Graph, project: str) -> tuple[int | None, int | 
         )
         tokens_injected: int = count_tokens(injected_block)
         return tokens_raw, tokens_injected
-    except Exception:
+    except (OSError, RuntimeError, ValueError, sqlite3.Error):
         return None, None
 
 

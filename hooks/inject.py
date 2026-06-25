@@ -61,7 +61,7 @@ def main() -> int:
         if block:
             print(block)
         return 0
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         print(f"CORTEX: injection failed: {exc}", file=sys.stderr)
         return 1
 
