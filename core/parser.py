@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -68,7 +67,7 @@ def _normalize_path(raw: str) -> str:
     """Return an absolute POSIX path, resolving relative paths against cwd."""
     p = Path(raw)
     if not p.is_absolute():
-        p = Path(os.getcwd()) / p
+        p = Path.cwd() / p
     return str(p)
 
 
