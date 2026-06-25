@@ -361,7 +361,7 @@ def git_channel(project_root: Path, session_start: int) -> list[CandidateNode]:
 
     try:
         repo = gitmod.Repo(str(project_root), search_parent_directories=True)
-    except Exception:
+    except (ValueError, gitmod.InvalidGitRepositoryError, gitmod.NoSuchPathError):
         logger.debug("Not a git repo: %s; skipping git channel", project_root)
         return []
 
@@ -385,7 +385,7 @@ def git_channel(project_root: Path, session_start: int) -> list[CandidateNode]:
                             project=str(project_root),
                         )
                     )
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         logger.debug("Failed to read commits: %s", exc)
 
     # File churn hotspots
@@ -404,7 +404,7 @@ def git_channel(project_root: Path, session_start: int) -> list[CandidateNode]:
                     project=str(project_root),
                 )
             )
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         logger.debug("Failed to compute churn: %s", exc)
 
     return candidates
@@ -425,7 +425,7 @@ def _compute_file_churn(repo: Any, lookback: int, threshold: float) -> dict[str,
             for diff in commit.diff(commit.parents[0] if commit.parents else None):
                 if diff.a_path:
                     counts[diff.a_path] += 1
-        except Exception:
+        except (ValueError, OSError):
             continue
 
     return {
