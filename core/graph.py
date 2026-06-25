@@ -240,6 +240,11 @@ class Graph:
             List of Node objects with similarity >= threshold, ordered by
             descending similarity, capped at limit.
         """
+        if not (0.0 <= threshold <= 1.0):
+            raise ValueError(f"threshold must be in [0.0, 1.0], got {threshold}")
+        if limit < 1:
+            raise ValueError(f"limit must be >= 1, got {limit}")
+
         rows = self._conn.execute(
             "SELECT * FROM nodes WHERE project = ? AND embedding IS NOT NULL",
             (project,),
