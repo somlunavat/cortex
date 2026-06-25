@@ -480,7 +480,11 @@ def export(
         content = json.dumps(rows, indent=2)
 
     if output:
-        Path(output).write_text(content)
+        try:
+            Path(output).write_text(content)
+        except OSError as exc:
+            console.print(f"[red]Failed to write {output}: {exc}[/red]")
+            raise typer.Exit(1) from exc
         console.print(f"[green]Exported {len(nodes)} nodes to:[/green] {output}")
     else:
         print(content)
@@ -830,6 +834,13 @@ def clean(
 
     Use --dry-run to preview what would be deleted without committing.
     """
+    if days < 1:
+        console.print("[red]--days must be at least 1.[/red]")
+        raise typer.Exit(1)
+    if tier not in (0, 1, 2):
+        console.print("[red]--tier must be 0 (all), 1, or 2.[/red]")
+        raise typer.Exit(1)
+
     root = Path(project_path) if project_path else _project_root()
     g = open_graph(root)
 

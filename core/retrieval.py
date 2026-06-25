@@ -302,6 +302,14 @@ def retrieve(
     return _enforce_budget(tier3, top_fused, budget_tokens)
 
 
+def _format_node_line(node: Node) -> str:
+    """Format a single node as a bullet line, appending rationale if present."""
+    line = f"• {node.text}"
+    if node.rationale:
+        line += f" ({node.rationale})"
+    return line
+
+
 def format_injection_block(
     nodes: list[Node],
     project: str,
@@ -329,20 +337,12 @@ def format_injection_block(
     if conventions:
         lines.append("")
         lines.append("[CONVENTIONS — always apply]")
-        for node in conventions:
-            line = f"• {node.text}"
-            if node.rationale:
-                line += f" ({node.rationale})"
-            lines.append(line)
+        lines.extend(_format_node_line(n) for n in conventions)
 
     if context:
         lines.append("")
         lines.append("[RELEVANT CONTEXT — this session]")
-        for node in context:
-            line = f"• {node.text}"
-            if node.rationale:
-                line += f" ({node.rationale})"
-            lines.append(line)
+        lines.extend(_format_node_line(n) for n in context)
 
     body = "\n".join(lines)
     token_count = count_tokens(body)

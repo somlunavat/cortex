@@ -115,6 +115,7 @@ class Graph:
         """
         node_id = str(uuid.uuid4())
         now = int(time.time())
+        created = node.created_at or now
         embedding_blob: bytes | None = None
         if node.embedding is not None:
             embedding_blob = serialize(node.embedding, node.precision_bits)
@@ -139,7 +140,7 @@ class Graph:
                 node.scope,
                 node.source,
                 now,
-                node.created_at if node.created_at else now,
+                created,
                 node.session_count,
             ),
         )
