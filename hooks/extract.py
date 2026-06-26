@@ -10,6 +10,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -20,6 +21,80 @@ from core.extractor import run_extraction
 from core.graph import Graph, Node
 from core.parser import EventType, detect_co_occurring_writes, parse_transcript
 from core.retrieval import TOKEN_BUDGET, count_tokens, format_injection_block, retrieve
+
+
+def _write_candidates(
+    candidates: list[Any],
+    embeddings: list[Any],
+    graph: Graph,
+    now: int,
+    project: str,
+) -> tuple[int, dict[str, str]]:
+    """Write or merge each candidate into the graph.
+
+    Returns:
+        (nodes_written, file_node_ids) where file_node_ids maps relative
+        file path tokens to their node UUIDs (used for edge wiring).
+    """
+    nodes_written = 0
+    file_node_ids: dict[str, str] = {}
+
+    for candidate, embedding in zip(candidates, embeddings, strict=True):
+        similar = graph.find_similar(embedding, project, threshold=0.9, limit=1)
+        node = Node(
+            id="",
+            type=candidate.type.value,
+            tier=1,
+            text=candidate.text,
+            rationale=candidate.rationale,
+            embedding=embedding,
+            precision_bits=32,
+            weight=1.0,
+            project=candidate.project,
+            scope=candidate.scope.value,
+            source=candidate.source.value,
+            last_accessed=now,
+            created_at=now,
+            session_count=1,
+        )
+        if similar:
+            node_id = similar[0].id
+            graph.merge_node(node_id, node)
+        else:
+            node_id = graph.write_node(node)
+            nodes_written += 1
+
+        # Track file-observation nodes for co-occurrence edge wiring
+        if candidate.source.value == "jsonl" and candidate.type.value == "observation":
+            # Text is "{rel_path} was modified N times…" — extract the leading path token
+            first_word = candidate.text.split(" ")[0]
+            if first_word:
+                file_node_ids[first_word] = node_id
+
+    return nodes_written, file_node_ids
+
+
+def _wire_co_occurring_edges(
+    co_pairs: tuple[frozenset[str], ...],
+    file_node_ids: dict[str, str],
+    project: str,
+    graph: Graph,
+) -> None:
+    """Create graph edges between nodes for files written in the same time window."""
+    for pair in co_pairs:
+        paths = list(pair)
+        if len(paths) != 2:
+            continue
+        try:
+            rel_a = str(Path(paths[0]).relative_to(project))
+            rel_b = str(Path(paths[1]).relative_to(project))
+        except ValueError:
+            continue
+        id_a = file_node_ids.get(rel_a)
+        id_b = file_node_ids.get(rel_b)
+        if id_a and id_b and id_a != id_b:
+            with contextlib.suppress(ValueError, sqlite3.IntegrityError):
+                graph.write_edge(id_a, id_b)
 
 
 def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
@@ -47,7 +122,6 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
         return 0
 
     session_start = min(e.timestamp for e in events)
-
     touched_files = list(
         dict.fromkeys(
             Path(e.data["path"])
@@ -57,68 +131,17 @@ def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
     )
 
     candidates = run_extraction(events, project, touched_files, session_start)
-
     embeddings = embed_batch([c.text for c in candidates])
-
-    nodes_written = 0
     now = int(time.time())
 
-    # file_rel → node_id for wiring co-occurring pairs as edges
-    file_node_ids: dict[str, str] = {}
-
-    for candidate, embedding in zip(candidates, embeddings, strict=True):
-        similar = graph.find_similar(embedding, project, threshold=0.9, limit=1)
-
-        node = Node(
-            id="",
-            type=candidate.type.value,
-            tier=1,
-            text=candidate.text,
-            rationale=candidate.rationale,
-            embedding=embedding,
-            precision_bits=32,
-            weight=1.0,
-            project=candidate.project,
-            scope=candidate.scope.value,
-            source=candidate.source.value,
-            last_accessed=now,
-            created_at=now,
-            session_count=1,
-        )
-
-        if similar:
-            node_id = similar[0].id
-            graph.merge_node(node_id, node)
-        else:
-            node_id = graph.write_node(node)
-            nodes_written += 1
-
-        # Track observation nodes that are about a specific file for edge wiring
-        if candidate.source.value == "jsonl" and candidate.type.value == "observation":
-            # Text is "{rel_path} was modified N times…" — extract the leading path token
-            first_word = candidate.text.split(" ")[0]
-            if first_word:
-                file_node_ids[first_word] = node_id
-
-    # Wire co-occurring file pairs as edges between their memory nodes
-    co_pairs = detect_co_occurring_writes(events)
-    for pair in co_pairs:
-        paths = list(pair)
-        if len(paths) != 2:
-            continue
-        try:
-            rel_a = str(Path(paths[0]).relative_to(project))
-            rel_b = str(Path(paths[1]).relative_to(project))
-        except ValueError:
-            continue
-        id_a = file_node_ids.get(rel_a)
-        id_b = file_node_ids.get(rel_b)
-        if id_a and id_b and id_a != id_b:
-            with contextlib.suppress(ValueError, sqlite3.IntegrityError):
-                graph.write_edge(id_a, id_b)
+    nodes_written, file_node_ids = _write_candidates(
+        candidates, embeddings, graph, now, project
+    )
+    _wire_co_occurring_edges(
+        detect_co_occurring_writes(events), file_node_ids, project, graph
+    )
 
     decay_result = run_decay(graph, project)
-
     tokens_raw, tokens_injected = _compute_token_stats(graph, project)
 
     graph.write_session(
