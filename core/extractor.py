@@ -639,6 +639,28 @@ def nlp_channel(prose_turns: list[str], project: str) -> list[CandidateNode]:
 # ---------------------------------------------------------------------------
 
 
+def _infer_touched_files(events: list[ParsedEvent]) -> list[Path]:
+    """Return unique file paths written during the session, in order of first write."""
+    seen: set[str] = set()
+    result: list[Path] = []
+    for e in events:
+        if e.type == EventType.FILE_WRITE:
+            p = e.data.get("path", "")
+            if p and p not in seen:
+                seen.add(p)
+                result.append(Path(p))
+    return result
+
+
+def _extract_prose_turns(events: list[ParsedEvent]) -> list[str]:
+    """Return text from assistant_message events in order."""
+    return [
+        str(e.data.get("text", ""))
+        for e in events
+        if e.type == EventType.ASSISTANT_MESSAGE and e.data.get("text")
+    ]
+
+
 def run_extraction(
     events: list[ParsedEvent],
     project: str,
@@ -659,26 +681,13 @@ def run_extraction(
     Returns:
         Merged list of CandidateNode objects, deduplicated by text.
     """
-    if touched_files is None:
-        seen: set[str] = set()
-        touched_files = []
-        for e in events:
-            if e.type == EventType.FILE_WRITE:
-                p = e.data.get("path", "")
-                if p and p not in seen:
-                    seen.add(p)
-                    touched_files.append(Path(p))
+    files = touched_files if touched_files is not None else _infer_touched_files(events)
+    prose_turns = _extract_prose_turns(events)
 
-    prose_turns = [
-        str(e.data.get("text", ""))
-        for e in events
-        if e.type == EventType.ASSISTANT_MESSAGE and e.data.get("text")
+    all_candidates: list[CandidateNode] = [
+        *jsonl_channel(events, project),
+        *ast_channel(files, project),
+        *git_channel(Path(project), session_start),
+        *nlp_channel(prose_turns, project),
     ]
-
-    all_candidates: list[CandidateNode] = []
-    all_candidates.extend(jsonl_channel(events, project))
-    all_candidates.extend(ast_channel(touched_files, project))
-    all_candidates.extend(git_channel(Path(project), session_start))
-    all_candidates.extend(nlp_channel(prose_turns, project))
-
     return [c for c in all_candidates if c.durability >= DURABILITY_THRESHOLD]
