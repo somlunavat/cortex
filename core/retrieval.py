@@ -252,6 +252,33 @@ def _enforce_budget(
     return result
 
 
+def _rank_candidates(
+    query: str, candidates: list[Node], graph: Graph
+) -> list[ScoredNode]:
+    """Score and rank tier-1/2 candidate nodes using vector + BM25 + graph signals.
+
+    Args:
+        query: Natural-language query string.
+        candidates: Non-tier-3 nodes to rank.
+        graph: Graph instance for edge lookups (graph channel).
+
+    Returns:
+        Fused ScoredNodes in descending score order, capped at TOP_K.
+    """
+    query_embedding = embed(query)
+    index = build_bm25_index(candidates)
+
+    v_scores = vector_channel(query_embedding, candidates)
+    b_scores = bm25_channel(query, candidates, index)
+
+    top3_seeds = [
+        sn.node for sn in sorted(v_scores, key=lambda s: s.score, reverse=True)[:3]
+    ]
+    g_scores = graph_channel(top3_seeds, graph, candidates)
+
+    return fuse_scores(v_scores, b_scores, g_scores)[:TOP_K]
+
+
 def retrieve(
     query: str,
     project: str,
@@ -285,20 +312,7 @@ def retrieve(
     if not candidates:
         return list(tier3)
 
-    query_embedding = embed(query)
-    index = build_bm25_index(candidates)
-
-    v_scores = vector_channel(query_embedding, candidates)
-    b_scores = bm25_channel(query, candidates, index)
-
-    top3_seeds = [
-        sn.node for sn in sorted(v_scores, key=lambda s: s.score, reverse=True)[:3]
-    ]
-    g_scores = graph_channel(top3_seeds, graph, candidates)
-
-    fused = fuse_scores(v_scores, b_scores, g_scores)
-    top_fused = fused[:TOP_K]
-
+    top_fused = _rank_candidates(query, candidates, graph)
     return _enforce_budget(tier3, top_fused, budget_tokens)
 
 
