@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from cli.config import open_graph
 from core.decay import run_decay
+from core.graph import Graph
 
 app = typer.Typer(
     name="cortex",
@@ -42,6 +43,19 @@ console = Console()
 def _project_root() -> Path:
     """Resolve project root from CWD."""
     return Path.cwd()
+
+
+def _require_graph(project_path: str) -> tuple[Graph, str]:
+    """Open the Cortex graph for project_path (or CWD) and return (graph, project_str).
+
+    Prints a warning and exits with code 0 when no database is found.
+    """
+    root = Path(project_path) if project_path else _project_root()
+    g = open_graph(root)
+    if g is None:
+        console.print("[yellow]No Cortex database found.[/yellow]")
+        raise typer.Exit(0)
+    return g, str(root)
 
 
 def _fmt_ts(ts: int | None) -> str:
@@ -63,14 +77,7 @@ def status(
     ),
 ) -> None:
     """Show node counts by tier, type distribution, source breakdown, and last session."""
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found in this project.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
+    g, project = _require_graph(project_path)
 
     tier_map = g.get_tier_counts(project)
     tier_labels = {1: "Ephemeral", 2: "Semantic", 3: "Procedural"}
@@ -125,14 +132,7 @@ def recent(
 
     Useful after a session to see what Cortex surfaced to Claude.
     """
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
+    g, project = _require_graph(project_path)
     nodes = g.get_recent_nodes(project, limit=limit)
 
     if not nodes:
@@ -165,14 +165,7 @@ def recent(
 @app.command()
 def graph() -> None:
     """Print an ASCII adjacency summary of the knowledge graph."""
-    root = _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
+    g, project = _require_graph("")
     nodes = g.get_all_nodes(project=project)
 
     if not nodes:
@@ -204,13 +197,7 @@ def graph() -> None:
 @app.command()
 def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> None:
     """Display full metadata for a single node."""
-    root = _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(1)
-
+    g, _ = _require_graph("")
     target = g.get_node(node_id)
 
     if target is None:
@@ -239,13 +226,7 @@ def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> 
 @app.command()
 def prune(node_id: str = typer.Argument(..., help="Node UUID to evict")) -> None:
     """Manually evict a node from the graph."""
-    root = _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(1)
-
+    g, _ = _require_graph("")
     target = g.get_node(node_id)
 
     if target is None:
@@ -264,14 +245,7 @@ def reset(
     confirm: bool = typer.Option(False, "--yes", help="Skip confirmation prompt"),
 ) -> None:
     """Wipe all nodes for a project. Irreversible."""
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
+    g, project = _require_graph(project_path)
     count = len(g.get_all_nodes(project=project))
 
     if not confirm:
@@ -299,14 +273,7 @@ def search(
     ),
 ) -> None:
     """Search memory nodes by text using BM25 ranking."""
-    root = _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
+    g, project = _require_graph("")
     valid_sources = {"jsonl", "ast", "git", "nlp"}
     if source and source not in valid_sources:
         console.print(
@@ -373,14 +340,7 @@ def decay(
     ),
 ) -> None:
     """Run weight decay, eviction, and tier promotion for this project."""
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
+    g, project = _require_graph(project_path)
     result = run_decay(g, project)
 
     console.print(f"[green]Decay complete[/green] for {project}")
@@ -403,14 +363,7 @@ def export(
     ),
 ) -> None:
     """Export memory nodes to JSON or CSV for backup or inspection."""
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
+    g, project = _require_graph(project_path)
     nodes = g.get_all_nodes(project=project, tier=tier if tier else None)
 
     if not nodes:
@@ -498,20 +451,14 @@ def sessions(
     ),
 ) -> None:
     """List recent extraction sessions with node and token stats."""
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    rows = g.get_session_records(str(root), limit=limit)
+    g, project = _require_graph(project_path)
+    rows = g.get_session_records(project, limit=limit)
 
     if not rows:
         console.print("[dim]No sessions recorded for this project.[/dim]")
         raise typer.Exit(0)
 
-    table = Table(title=f"Sessions — {root!s}")
+    table = Table(title=f"Sessions — {project}")
     table.add_column("Ended", style="cyan", no_wrap=True)
     table.add_column("Written", justify="right")
     table.add_column("Evicted", justify="right")
@@ -542,15 +489,7 @@ def stats(
     ),
 ) -> None:
     """Show aggregate memory statistics across all sessions."""
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
-
+    g, project = _require_graph(project_path)
     agg = g.get_aggregate_stats(project)
     tier_counts: dict[int, int] = agg["tier_counts"]
     node_total = sum(tier_counts.values())
@@ -700,13 +639,7 @@ def pin(
     Tier-3 nodes are never decayed or evicted by the automatic scheduler.
     Embedding precision is downcast to 2 bits on promotion.
     """
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(1)
-
+    g, _ = _require_graph(project_path)
     target = g.get_node(node_id)
     if target is None:
         console.print(f"[red]Node not found:[/red] {node_id}")
@@ -754,13 +687,7 @@ def annotate(
     The rationale is injected alongside the node text so Claude sees the
     'why' behind a convention or decision.
     """
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(1)
-
+    g, _ = _require_graph(project_path)
     target = g.get_node(node_id)
     if target is None:
         console.print(f"[red]Node not found:[/red] {node_id}")
@@ -788,13 +715,7 @@ def bump(
     Useful for manually signalling that a node is important without waiting
     for automatic access-based weighting.
     """
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(1)
-
+    g, _ = _require_graph(project_path)
     target = g.get_node(node_id)
     if target is None:
         console.print(f"[red]Node not found:[/red] {node_id}")
@@ -841,14 +762,7 @@ def clean(
         console.print("[red]--tier must be 0 (all), 1, or 2.[/red]")
         raise typer.Exit(1)
 
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
+    g, project = _require_graph(project_path)
     stale = g.get_stale_nodes(project, days=days, tier=tier if tier else None)
 
     if not stale:
@@ -902,14 +816,7 @@ def list_nodes(
     ),
 ) -> None:
     """List memory nodes in a paginated table with optional filters."""
-    root = Path(project_path) if project_path else _project_root()
-    g = open_graph(root)
-
-    if g is None:
-        console.print("[yellow]No Cortex database found.[/yellow]")
-        raise typer.Exit(0)
-
-    project = str(root)
+    g, project = _require_graph(project_path)
     valid_types = {"observation", "fact", "convention", "error"}
     valid_sources = {"jsonl", "ast", "git", "nlp"}
     valid_sorts = {"weight", "created", "accessed"}
