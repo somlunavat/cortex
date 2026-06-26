@@ -28,6 +28,7 @@ def _get_model() -> object | None:
     _model_loaded = True
     try:
         from sentence_transformers import SentenceTransformer
+
         _model = SentenceTransformer(_MODEL_NAME)
         logger.debug("Loaded embedding model %s", _MODEL_NAME)
     except (ImportError, OSError, RuntimeError) as exc:
@@ -58,6 +59,7 @@ def embed_batch(texts: list[str]) -> list[np.ndarray]:
 
     try:
         from sentence_transformers import SentenceTransformer
+
         assert isinstance(model, SentenceTransformer)
         results = model.encode(texts, convert_to_numpy=True, batch_size=64)
         out: list[np.ndarray] = []
@@ -89,6 +91,7 @@ def embed(text: str) -> np.ndarray:
         return np.zeros(_EMBEDDING_DIM, dtype=np.float32)
     try:
         from sentence_transformers import SentenceTransformer
+
         assert isinstance(model, SentenceTransformer)
         result = model.encode(text, convert_to_numpy=True)
         arr = np.asarray(result, dtype=np.float32)
