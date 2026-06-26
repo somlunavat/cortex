@@ -24,8 +24,11 @@ jobs:
           pip install -e ".[dev]"
           python -m spacy download en_core_web_sm
 
-      - name: Lint
-        run: ruff check . && black --check .
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Lint (black)
+        run: black --check --diff .
 
       - name: Type check
         run: mypy --strict --ignore-missing-imports core/ hooks/ cli/
@@ -50,4 +53,4 @@ jobs:
           pip install -e ".[dev]"
           python -m spacy download en_core_web_sm
       - name: Slow tests
-        run: pytest tests/ -m slow
+        run: pytest tests/ -v -m slow
