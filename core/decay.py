@@ -44,6 +44,37 @@ class DecayResult:
     nodes_promoted: int
 
 
+def _decay_rate(tier: int) -> float:
+    """Return the per-session weight multiplier for a node tier."""
+    return TIER1_DECAY_RATE if tier == 1 else TIER2_DECAY_RATE
+
+
+def _eviction_threshold(tier: int) -> float:
+    """Return the weight floor below which a tier-1 or tier-2 node is evicted."""
+    return TIER1_EVICTION_THRESHOLD if tier == 1 else TIER2_EVICTION_THRESHOLD
+
+
+def _meets_promotion_criteria(node: Node, decayed_weight: float, now: int) -> bool:
+    """Return True if node qualifies for promotion to the next tier.
+
+    Tier-1 → Tier-2: weight ≥ 8 AND session_count ≥ 3
+    Tier-2 → Tier-3: weight ≥ 20 AND session_count ≥ 8 AND age ≥ 14 days
+    """
+    if node.tier == 1:
+        return (
+            decayed_weight >= TIER1_PROMOTION_WEIGHT
+            and node.session_count >= TIER1_PROMOTION_SESSIONS
+        )
+    if node.tier == 2:
+        age_days = (now - node.created_at) / SECONDS_PER_DAY
+        return (
+            decayed_weight >= TIER2_PROMOTION_WEIGHT
+            and node.session_count >= TIER2_PROMOTION_SESSIONS
+            and age_days >= TIER2_PROMOTION_AGE_DAYS
+        )
+    return False
+
+
 def run_decay(graph: Graph, project: str) -> DecayResult:
     """Apply weight decay, eviction, and promotion to all nodes for a project.
 
@@ -76,47 +107,23 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
         if node.tier == 3:
             continue
 
-        # Apply decay
-        if node.tier == 1:
-            new_weight = node.weight * TIER1_DECAY_RATE
-        else:
-            new_weight = node.weight * TIER2_DECAY_RATE
-
-        delta = new_weight - node.weight
+        delta = node.weight * _decay_rate(node.tier) - node.weight
         graph.update_weight(node.id, delta=delta)
         decayed += 1
 
         decayed_weight = max(0.0, node.weight + delta)
 
-        # Eviction
-        if node.tier == 1 and decayed_weight < TIER1_EVICTION_THRESHOLD:
+        if decayed_weight < _eviction_threshold(node.tier):
             graph.delete_node(node.id)
             evicted += 1
             continue
 
-        if node.tier == 2 and decayed_weight < TIER2_EVICTION_THRESHOLD:
-            graph.delete_node(node.id)
-            evicted += 1
-            continue
-
-        # Promotion checks
-        if node.tier == 1:
-            if (
-                decayed_weight >= TIER1_PROMOTION_WEIGHT
-                and node.session_count >= TIER1_PROMOTION_SESSIONS
-            ):
-                _promote_node(graph, node, new_tier=2, new_precision=8, now=now)
-                promoted += 1
-
-        elif node.tier == 2:
-            age_days = (now - node.created_at) / SECONDS_PER_DAY
-            if (
-                decayed_weight >= TIER2_PROMOTION_WEIGHT
-                and node.session_count >= TIER2_PROMOTION_SESSIONS
-                and age_days >= TIER2_PROMOTION_AGE_DAYS
-            ):
-                _promote_node(graph, node, new_tier=3, new_precision=2, now=now)
-                promoted += 1
+        if _meets_promotion_criteria(node, decayed_weight, now):
+            new_tier, new_precision = (2, 8) if node.tier == 1 else (3, 2)
+            _promote_node(
+                graph, node, new_tier=new_tier, new_precision=new_precision, now=now
+            )
+            promoted += 1
 
     return DecayResult(
         project=project,
