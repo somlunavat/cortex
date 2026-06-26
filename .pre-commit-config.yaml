@@ -1,13 +1,12 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
+    rev: v0.4.10
     hooks:
       - id: ruff
         args: [--fix]
-      - id: ruff-format
 
   - repo: https://github.com/psf/black
-    rev: 24.4.2
+    rev: 26.5.1
     hooks:
       - id: black
 
@@ -17,6 +16,13 @@ repos:
       - id: mypy
         args: [--strict, --ignore-missing-imports]
         additional_dependencies:
-          - types-all
+          - numpy
         pass_filenames: false
         entry: mypy core/ hooks/ cli/
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.9
+    hooks:
+      - id: bandit
+        args: [-ll, -r]
+        files: ^(core|hooks|cli)/
