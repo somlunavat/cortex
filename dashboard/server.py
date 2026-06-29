@@ -36,6 +36,12 @@ app = FastAPI(title="Cortex Dashboard", version="0.1.0")
 # ---------------------------------------------------------------------------
 
 
+_NODE_COLS = (
+    "id, type, tier, text, rationale, weight, scope, source, "
+    "last_accessed, created_at, session_count, precision_bits"
+)
+
+
 def _open_db_ro(project_root: Path) -> sqlite3.Connection | None:
     path = _db_path(project_root)
     if not path.exists():
@@ -46,7 +52,10 @@ def _open_db_ro(project_root: Path) -> sqlite3.Connection | None:
     return conn
 
 
-def _project_root() -> Path:
+def _resolve_root(project: str) -> Path:
+    """Return Path(project) when given, otherwise read CLAUDE_PROJECT_PATH or CWD."""
+    if project:
+        return Path(project)
     return Path(os.environ.get("CLAUDE_PROJECT_PATH", str(Path.cwd())))
 
 
@@ -58,7 +67,7 @@ def _project_root() -> Path:
 @app.get("/api/status")
 def api_status() -> dict[str, Any]:
     """Return tier counts and last-session summary for the current project."""
-    root = _project_root()
+    root = _resolve_root("")
     project = str(root)
     conn = _open_db_ro(root)
 
@@ -96,26 +105,22 @@ def api_nodes(
     tier: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return all nodes (optionally filtered by tier) as JSON objects."""
-    root = Path(project) if project else _project_root()
+    root = _resolve_root(project)
     conn = _open_db_ro(root)
     if conn is None:
         return []
 
+    where = "project = ?"
+    params: list[Any] = [str(root)]
+    if tier is not None:
+        where += " AND tier = ?"
+        params.append(tier)
+
     with contextlib.closing(conn):
-        if tier is not None:
-            rows = conn.execute(
-                "SELECT id, type, tier, text, rationale, weight, scope, source, "
-                "last_accessed, created_at, session_count, precision_bits "
-                "FROM nodes WHERE project = ? AND tier = ?",
-                (str(root), tier),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT id, type, tier, text, rationale, weight, scope, source, "
-                "last_accessed, created_at, session_count, precision_bits "
-                "FROM nodes WHERE project = ?",
-                (str(root),),
-            ).fetchall()
+        rows = conn.execute(
+            f"SELECT {_NODE_COLS} FROM nodes WHERE {where}",  # nosec B608
+            params,
+        ).fetchall()
 
     return [dict(row) for row in rows]
 
@@ -123,7 +128,7 @@ def api_nodes(
 @app.get("/api/edges")
 def api_edges(project: str = "") -> list[dict[str, Any]]:
     """Return all edges for nodes in the current project."""
-    root = Path(project) if project else _project_root()
+    root = _resolve_root(project)
     conn = _open_db_ro(root)
     if conn is None:
         return []
@@ -145,7 +150,7 @@ def api_edges(project: str = "") -> list[dict[str, Any]]:
 @app.get("/api/sessions")
 def api_sessions(project: str = "", limit: int = 50) -> list[dict[str, Any]]:
     """Return recent session records for the current project."""
-    root = Path(project) if project else _project_root()
+    root = _resolve_root(project)
     conn = _open_db_ro(root)
     if conn is None:
         return []
