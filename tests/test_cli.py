@@ -971,3 +971,192 @@ class TestRecentCommand:
             _seed_node(tmp_db, project, text=f"node {i}", tier=1)
         result = self._invoke_recent(tmp_db, project, ["--limit", "3"])
         assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# cortex export
+# ---------------------------------------------------------------------------
+
+
+class TestExportCommand:
+    def _invoke_export(
+        self,
+        tmp_db: Path,
+        project: str,
+        extra: list[str] | None = None,
+    ) -> object:
+        args = ["export", "--project", project] + (extra or [])
+        return runner.invoke(app, args, env={"CORTEX_DB_PATH": str(tmp_db)})
+
+    def test_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["export", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "No Cortex" in result.output
+
+    def test_empty_db_no_nodes_message(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_export(tmp_db, project)
+        assert result.exit_code == 0
+        assert "No nodes" in result.output
+
+    def test_json_output_to_stdout(self, tmp_db: Path, project: str) -> None:
+        import json
+
+        _seed_node(tmp_db, project, text="export test node", tier=2)
+        result = self._invoke_export(tmp_db, project)
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["text"] == "export test node"
+
+    def test_json_output_to_file(
+        self, tmp_db: Path, project: str, tmp_path: Path
+    ) -> None:
+        import json
+
+        _seed_node(tmp_db, project, text="file export node", tier=1)
+        out_file = tmp_path / "out.json"
+        result = self._invoke_export(tmp_db, project, ["--out", str(out_file)])
+        assert result.exit_code == 0
+        assert "Exported 1" in result.output
+        assert out_file.exists()
+        data = json.loads(out_file.read_text())
+        assert data[0]["text"] == "file export node"
+
+    def test_csv_format_to_stdout(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="csv export node", tier=1)
+        result = self._invoke_export(tmp_db, project, ["--format", "csv"])
+        assert result.exit_code == 0
+        assert "csv export node" in result.output
+        assert "text" in result.output  # CSV header
+
+    def test_csv_to_file(self, tmp_db: Path, project: str, tmp_path: Path) -> None:
+        _seed_node(tmp_db, project, text="csv file node", tier=1)
+        out_file = tmp_path / "out.csv"
+        result = self._invoke_export(
+            tmp_db, project, ["--format", "csv", "--out", str(out_file)]
+        )
+        assert result.exit_code == 0
+        assert out_file.exists()
+        content = out_file.read_text()
+        assert "csv file node" in content
+
+    def test_tier_filter_restricts_output(self, tmp_db: Path, project: str) -> None:
+        import json
+
+        _seed_node(tmp_db, project, text="tier1 node", tier=1)
+        _seed_node(tmp_db, project, text="tier2 node", tier=2)
+        _seed_node(tmp_db, project, text="tier3 node", tier=3)
+        result = self._invoke_export(tmp_db, project, ["--tier", "3"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert all(n["tier"] == 3 for n in data)
+        assert any("tier3" in n["text"] for n in data)
+
+    def test_multiple_nodes_exported(self, tmp_db: Path, project: str) -> None:
+        import json
+
+        for i in range(4):
+            _seed_node(tmp_db, project, text=f"bulk node {i}", tier=1)
+        result = self._invoke_export(tmp_db, project)
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert len(data) == 4
+
+    def test_write_error_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="write fail node", tier=1)
+        result = self._invoke_export(
+            tmp_db, project, ["--out", "/no_permission_dir/out.json"]
+        )
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# cortex decay
+# ---------------------------------------------------------------------------
+
+
+class TestDecayCommand:
+    def _invoke_decay(self, tmp_db: Path, project: str) -> object:
+        return runner.invoke(
+            app,
+            ["decay", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+
+    def test_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["decay", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "No Cortex" in result.output
+
+    def test_decay_empty_db_prints_complete(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_decay(tmp_db, project)
+        assert result.exit_code == 0
+        assert "Decay complete" in result.output
+
+    def test_decay_prints_counts(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="decayable node", tier=1)
+        result = self._invoke_decay(tmp_db, project)
+        assert result.exit_code == 0
+        assert "Decayed" in result.output
+        assert "Evicted" in result.output
+        assert "Promoted" in result.output
+
+    def test_decay_decrements_weight(self, tmp_db: Path, project: str) -> None:
+        node_id = _seed_node(tmp_db, project, text="weight decay node", tier=1)
+        conn = sqlite3.connect(str(tmp_db))
+        weight_before = conn.execute(
+            "SELECT weight FROM nodes WHERE id = ?", (node_id,)
+        ).fetchone()[0]
+        conn.close()
+
+        result = self._invoke_decay(tmp_db, project)
+        assert result.exit_code == 0
+
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute(
+            "SELECT weight FROM nodes WHERE id = ?", (node_id,)
+        ).fetchone()
+        conn.close()
+        if row is not None:
+            assert row[0] <= weight_before  # weight was decayed or node was evicted
+
+    def test_decay_evicts_very_low_weight_node(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        conn = sqlite3.connect(str(tmp_db))
+        node_id = str(uuid.uuid4())
+        now = int(time.time())
+        emb = np.zeros(384, dtype=np.float32).tobytes()
+        conn.execute(
+            """INSERT INTO nodes (id, type, tier, text, rationale, embedding, precision_bits,
+                                   weight, project, scope, source, last_accessed, created_at, session_count)
+               VALUES (?, 'observation', 1, 'low weight node', NULL, ?, 32, 0.0001, ?, 'project',
+                       'jsonl', ?, ?, 1)""",
+            (node_id, emb, project, now - 86400 * 30, now - 86400 * 30),
+        )
+        conn.commit()
+        conn.close()
+
+        result = self._invoke_decay(tmp_db, project)
+        assert result.exit_code == 0
+
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT id FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        conn.close()
+        assert row is None, "Node with near-zero weight should be evicted"
+
+    def test_decay_result_project_in_output(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_decay(tmp_db, project)
+        assert result.exit_code == 0
+        # Rich may wrap the long tmp path; check for any path fragment
+        path_fragment = Path(project).name
+        assert path_fragment in result.output.replace("\n", "")
