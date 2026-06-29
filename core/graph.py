@@ -853,19 +853,11 @@ class Graph:
                 f"sort_col must be one of {allowed_sort}, got {sort_col!r}"
             )
 
-        clauses = ["project = ?"]
-        params: list[object] = [project]
-        if tier is not None:
-            clauses.append("tier = ?")
-            params.append(tier)
+        where, params = _node_filter(project, tier=tier, source=source)
         if node_type is not None:
-            clauses.append("type = ?")
+            where += " AND type = ?"
             params.append(node_type)
-        if source is not None:
-            clauses.append("source = ?")
-            params.append(source)
 
-        where = " AND ".join(clauses)
         page_sql = f"SELECT id, type, tier, text, rationale, embedding, precision_bits, weight, project, scope, source, last_accessed, created_at, session_count FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?"  # nosec B608
         count_sql = f"SELECT COUNT(*) FROM nodes WHERE {where}"  # nosec B608
         rows = self._conn.execute(page_sql, [*params, limit]).fetchall()
