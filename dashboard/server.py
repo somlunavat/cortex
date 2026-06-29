@@ -196,18 +196,22 @@ class _ConnectionManager:
 _manager = _ConnectionManager()
 
 
+def _build_graph_snapshot() -> dict[str, Any]:
+    """Build the JSON-serialisable graph snapshot pushed over WebSocket."""
+    return {
+        "nodes": api_nodes(),
+        "edges": api_edges(),
+        "ts": int(time.time()),
+    }
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     """WebSocket endpoint — pushes a graph snapshot on connect and every 5s."""
     await _manager.connect(websocket)
     try:
         while True:
-            snapshot = {
-                "nodes": api_nodes(),
-                "edges": api_edges(),
-                "ts": int(time.time()),
-            }
-            await websocket.send_text(json.dumps(snapshot))
+            await websocket.send_text(json.dumps(_build_graph_snapshot()))
             await asyncio.sleep(5)
     except WebSocketDisconnect:
         _manager.disconnect(websocket)
