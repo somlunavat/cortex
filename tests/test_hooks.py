@@ -449,3 +449,257 @@ class TestMainFunctions:
         assert row is not None
         if row["tokens_raw"] and row["tokens_injected"]:
             assert row["tokens_raw"] >= row["tokens_injected"]
+
+
+# ---------------------------------------------------------------------------
+# _write_candidates
+# ---------------------------------------------------------------------------
+
+
+class TestWriteCandidates:
+    """Unit tests for the _write_candidates helper in hooks/extract.py."""
+
+    from hooks.extract import _write_candidates
+
+    def _make_candidate(
+        self, text: str, source: str = "nlp", type_: str = "fact"
+    ) -> object:
+        from core.extractor import CandidateNode, NodeType, ScopeType, SourceType
+
+        return CandidateNode(
+            text=text,
+            rationale=None,
+            type=NodeType(type_),
+            source=SourceType(source),
+            scope=ScopeType.PROJECT,
+            durability=0.8,
+            project=TEST_PROJECT,
+        )
+
+    def test_write_candidates_empty_returns_zero(self, graph: Graph) -> None:
+        from hooks.extract import _write_candidates
+
+        n, ids = _write_candidates([], [], graph, 0, TEST_PROJECT)
+        assert n == 0
+        assert ids == {}
+
+    def test_write_candidates_writes_new_node(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidate = self._make_candidate("use black for formatting")
+        embedding = rng.random(384).astype(np.float32)
+        n, _ = _write_candidates([candidate], [embedding], graph, 0, TEST_PROJECT)
+        assert n == 1
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert len(nodes) == 1
+        assert nodes[0].text == "use black for formatting"
+
+    def test_write_candidates_dedup_merges_similar(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        embedding = rng.random(384).astype(np.float32)
+        # Write a node directly so the second _write_candidates call sees it
+        node = _make_node("use black for formatting", embedding=embedding)
+        graph.write_node(node)
+
+        candidate = self._make_candidate("use black for formatting")
+        n, _ = _write_candidates([candidate], [embedding], graph, 0, TEST_PROJECT)
+        # Should merge, not write a new node
+        assert n == 0
+        assert len(graph.get_all_nodes(project=TEST_PROJECT)) == 1
+
+    def test_write_candidates_jsonl_observation_tracked(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidate = self._make_candidate(
+            "auth/middleware.py was modified 4 times",
+            source="jsonl",
+            type_="observation",
+        )
+        embedding = rng.random(384).astype(np.float32)
+        _, file_ids = _write_candidates(
+            [candidate], [embedding], graph, 0, TEST_PROJECT
+        )
+        assert "auth/middleware.py" in file_ids
+
+    def test_write_candidates_non_observation_not_tracked(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidate = self._make_candidate("prefer async patterns")
+        embedding = rng.random(384).astype(np.float32)
+        _, file_ids = _write_candidates(
+            [candidate], [embedding], graph, 0, TEST_PROJECT
+        )
+        assert file_ids == {}
+
+    def test_write_candidates_multiple_nodes(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidates = [
+            self._make_candidate("node one"),
+            self._make_candidate("node two"),
+            self._make_candidate("node three"),
+        ]
+        embeddings = [rng.random(384).astype(np.float32) for _ in candidates]
+        n, _ = _write_candidates(candidates, embeddings, graph, 0, TEST_PROJECT)
+        assert n == 3
+        assert len(graph.get_all_nodes(project=TEST_PROJECT)) == 3
+
+
+# ---------------------------------------------------------------------------
+# _wire_co_occurring_edges
+# ---------------------------------------------------------------------------
+
+
+class TestWireCoOccurringEdges:
+    """Unit tests for _wire_co_occurring_edges in hooks/extract.py."""
+
+    def _make_file_nodes(
+        self, graph: Graph, rng: np.random.Generator, *rel_paths: str
+    ) -> dict[str, str]:
+        """Write observation nodes for each rel_path and return rel_path→node_id map."""
+        from core.extractor import CandidateNode, NodeType, ScopeType, SourceType
+        from hooks.extract import _write_candidates
+
+        candidates = []
+        embeddings = []
+        for rel in rel_paths:
+            candidates.append(
+                CandidateNode(
+                    text=f"{rel} was modified 3 times",
+                    rationale=None,
+                    type=NodeType.OBSERVATION,
+                    source=SourceType.JSONL,
+                    scope=ScopeType.MODULE,
+                    durability=0.8,
+                    project=TEST_PROJECT,
+                )
+            )
+            embeddings.append(rng.random(384).astype(np.float32))
+        _, file_ids = _write_candidates(candidates, embeddings, graph, 0, TEST_PROJECT)
+        return file_ids
+
+    def test_wire_creates_edge_between_co_occurring_files(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "a.py", "b.py")
+        co_pairs: tuple[frozenset[str], ...] = (
+            frozenset({f"{TEST_PROJECT}/a.py", f"{TEST_PROJECT}/b.py"}),
+        )
+        _wire_co_occurring_edges(co_pairs, file_ids, TEST_PROJECT, graph)
+        id_a = file_ids.get("a.py")
+        id_b = file_ids.get("b.py")
+        assert id_a and id_b
+        edges = graph.get_edges(id_a)
+        assert any(e.target_id == id_b or e.source_id == id_b for e in edges)
+
+    def test_wire_empty_pairs_no_edges(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "a.py", "b.py")
+        _wire_co_occurring_edges((), file_ids, TEST_PROJECT, graph)
+        for node_id in file_ids.values():
+            assert graph.get_edges(node_id) == []
+
+    def test_wire_skips_pair_if_node_missing(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "a.py")
+        co_pairs: tuple[frozenset[str], ...] = (
+            frozenset({f"{TEST_PROJECT}/a.py", f"{TEST_PROJECT}/missing.py"}),
+        )
+        _wire_co_occurring_edges(co_pairs, file_ids, TEST_PROJECT, graph)
+        id_a = file_ids.get("a.py")
+        assert id_a
+        assert graph.get_edges(id_a) == []
+
+    def test_wire_idempotent_duplicate_pair(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "a.py", "b.py")
+        co_pairs: tuple[frozenset[str], ...] = (
+            frozenset({f"{TEST_PROJECT}/a.py", f"{TEST_PROJECT}/b.py"}),
+        )
+        _wire_co_occurring_edges(co_pairs, file_ids, TEST_PROJECT, graph)
+        # Call again — IntegrityError is suppressed so this should not raise
+        _wire_co_occurring_edges(co_pairs, file_ids, TEST_PROJECT, graph)
+        id_a = file_ids.get("a.py")
+        assert id_a
+        edges = graph.get_edges(id_a)
+        assert len(edges) == 1  # still only one edge
+
+
+# ---------------------------------------------------------------------------
+# compact.py (PostCompact hook)
+# ---------------------------------------------------------------------------
+
+
+class TestCompactHook:
+    """compact.py delegates to inject_main; verify the delegation."""
+
+    def test_compact_returns_zero_when_no_db(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", TEST_PROJECT)
+        monkeypatch.setenv("CORTEX_DB_PATH", str(tmp_path / "nonexistent.db"))
+        monkeypatch.delenv("CLAUDE_INITIAL_MESSAGE", raising=False)
+        from hooks.compact import inject_main as compact_inject_main
+
+        result = compact_inject_main()
+        assert result == 0
+
+    def test_compact_returns_zero_with_empty_db(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        db_path = tmp_path / "cortex.db"
+        _create_graph_at(db_path)
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", TEST_PROJECT)
+        monkeypatch.setenv("CORTEX_DB_PATH", str(db_path))
+        monkeypatch.delenv("CLAUDE_INITIAL_MESSAGE", raising=False)
+        from hooks.compact import inject_main as compact_inject_main
+
+        result = compact_inject_main()
+        assert result == 0
+
+    def test_compact_injects_tier3_nodes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        rng: np.random.Generator,
+    ) -> None:
+        db_path = tmp_path / "cortex.db"
+        g = _create_graph_at(db_path)
+        e = rng.random(384).astype(np.float32)
+        g.write_node(
+            _make_node(
+                "always use type hints", tier=3, embedding=e, project=TEST_PROJECT
+            )
+        )
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", TEST_PROJECT)
+        monkeypatch.setenv("CORTEX_DB_PATH", str(db_path))
+        monkeypatch.delenv("CLAUDE_INITIAL_MESSAGE", raising=False)
+        from hooks.compact import inject_main as compact_inject_main
+
+        result = compact_inject_main()
+        captured = capsys.readouterr()
+        assert result == 0
+        assert "CORTEX MEMORY" in captured.out
