@@ -58,6 +58,28 @@ class Edge:
     last_seen: int
 
 
+def _node_filter(
+    project: str,
+    *,
+    tier: int | None = None,
+    source: str | None = None,
+) -> tuple[str, list[Any]]:
+    """Build a WHERE clause and params list for node queries.
+
+    Always includes project = ?. Appends tier and/or source filters when
+    provided. Returns (where_clause, params) ready for cursor.execute.
+    """
+    clauses = ["project = ?"]
+    params: list[Any] = [project]
+    if tier is not None:
+        clauses.append("tier = ?")
+        params.append(tier)
+    if source is not None:
+        clauses.append("source = ?")
+        params.append(source)
+    return " AND ".join(clauses), params
+
+
 def _row_to_node(row: sqlite3.Row) -> Node:
     """Convert a sqlite3.Row to a Node dataclass."""
     embedding: np.ndarray | None = None
@@ -291,16 +313,11 @@ class Graph:
         Returns:
             List of Node objects for the project, ordered by weight DESC.
         """
-        if tier is not None:
-            rows = self._conn.execute(
-                "SELECT * FROM nodes WHERE project = ? AND tier = ? ORDER BY weight DESC",
-                (project, tier),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM nodes WHERE project = ? ORDER BY weight DESC",
-                (project,),
-            ).fetchall()
+        where, params = _node_filter(project, tier=tier)
+        rows = self._conn.execute(
+            f"SELECT * FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
+            params,
+        ).fetchall()
         return [_row_to_node(row) for row in rows]
 
     def get_nodes_by_source(
@@ -318,18 +335,11 @@ class Graph:
         Returns:
             List of Node objects, ordered by weight DESC.
         """
-        if tier is not None:
-            rows = self._conn.execute(
-                "SELECT * FROM nodes WHERE project = ? AND source = ? AND tier = ? "
-                "ORDER BY weight DESC",
-                (project, source, tier),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM nodes WHERE project = ? AND source = ? "
-                "ORDER BY weight DESC",
-                (project, source),
-            ).fetchall()
+        where, params = _node_filter(project, source=source, tier=tier)
+        rows = self._conn.execute(
+            f"SELECT * FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
+            params,
+        ).fetchall()
         return [_row_to_node(row) for row in rows]
 
     def delete_node(self, node_id: str) -> None:
@@ -620,21 +630,17 @@ class Graph:
             List of stale Node objects ordered by last_accessed ascending
             (least recently accessed first).
         """
-        import time
-
         cutoff = int(time.time()) - days * 86_400
-        if tier is not None and tier != 3:
-            rows = self._conn.execute(
-                "SELECT * FROM nodes WHERE project = ? AND tier = ? "
-                "AND last_accessed < ? ORDER BY last_accessed ASC",
-                (project, tier, cutoff),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM nodes WHERE project = ? AND tier < 3 "
-                "AND last_accessed < ? ORDER BY last_accessed ASC",
-                (project, cutoff),
-            ).fetchall()
+        effective_tier = tier if (tier is not None and tier != 3) else None
+        where, params = _node_filter(project, tier=effective_tier)
+        if effective_tier is None:
+            where += " AND tier < 3"
+        where += " AND last_accessed < ?"
+        params.append(cutoff)
+        rows = self._conn.execute(
+            f"SELECT * FROM nodes WHERE {where} ORDER BY last_accessed ASC",  # nosec B608
+            params,
+        ).fetchall()
         return [_row_to_node(row) for row in rows]
 
     def delete_nodes_bulk(self, node_ids: list[str]) -> int:
