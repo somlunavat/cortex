@@ -1160,3 +1160,280 @@ class TestDecayCommand:
         # Rich may wrap the long tmp path; check for any path fragment
         path_fragment = Path(project).name
         assert path_fragment in result.output.replace("\n", "")
+
+
+# ---------------------------------------------------------------------------
+# cortex graph
+# ---------------------------------------------------------------------------
+
+
+class TestGraphCommand:
+    # `graph` has no --project; it uses CWD as the project string.
+    # Nodes must be seeded with project=str(Path.cwd()) to be found.
+
+    def _cwd_project(self) -> str:
+        return str(Path.cwd())
+
+    def _invoke_graph(self, tmp_db: Path) -> object:
+        return runner.invoke(app, ["graph"], env={"CORTEX_DB_PATH": str(tmp_db)})
+
+    def test_no_db_exits_cleanly(self, tmp_path: Path) -> None:
+        result = runner.invoke(
+            app, ["graph"], env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")}
+        )
+        assert result.exit_code == 0
+        assert "No Cortex" in result.output
+
+    def test_empty_graph_message(self, tmp_db: Path) -> None:
+        result = self._invoke_graph(tmp_db)
+        assert result.exit_code == 0
+        assert "empty" in result.output.lower()
+
+    def test_single_node_printed(self, tmp_db: Path) -> None:
+        _seed_node(tmp_db, self._cwd_project(), text="auth middleware is slow", tier=1)
+        result = self._invoke_graph(tmp_db)
+        assert result.exit_code == 0
+        assert "auth middleware" in result.output
+
+    def test_tier_marker_present(self, tmp_db: Path) -> None:
+        _seed_node(tmp_db, self._cwd_project(), text="some node", tier=2)
+        result = self._invoke_graph(tmp_db)
+        assert "T2" in result.output
+
+    def test_many_nodes_truncated(self, tmp_db: Path) -> None:
+        cwd_proj = self._cwd_project()
+        for i in range(25):
+            _seed_node(tmp_db, cwd_proj, text=f"bulk node {i:03d}", tier=1)
+        result = self._invoke_graph(tmp_db)
+        assert result.exit_code == 0
+        assert "more nodes" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex inspect
+# ---------------------------------------------------------------------------
+
+
+class TestInspectCommand:
+    # `inspect` has no --project; it opens graph at CWD but looks up nodes by ID.
+
+    def _invoke_inspect(self, tmp_db: Path, node_id: str) -> object:
+        return runner.invoke(
+            app, ["inspect", node_id], env={"CORTEX_DB_PATH": str(tmp_db)}
+        )
+
+    def test_no_db_exits_nonzero(self, tmp_path: Path) -> None:
+        result = runner.invoke(
+            app,
+            ["inspect", "00000000-0000-0000-0000-000000000000"],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code != 0
+
+    def test_missing_node_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_inspect(tmp_db, "00000000-0000-0000-0000-000000000000")
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+    def test_existing_node_shows_fields(self, tmp_db: Path, project: str) -> None:
+        node_id = _seed_node(tmp_db, project, text="inspect target node", tier=2)
+        result = self._invoke_inspect(tmp_db, node_id)
+        assert result.exit_code == 0
+        assert "inspect target node" in result.output
+        assert "tier" in result.output.lower()
+        assert "weight" in result.output.lower()
+
+    def test_inspect_shows_node_id(self, tmp_db: Path, project: str) -> None:
+        node_id = _seed_node(tmp_db, project, text="id check node", tier=1)
+        result = self._invoke_inspect(tmp_db, node_id)
+        assert result.exit_code == 0
+        assert node_id in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex prune
+# ---------------------------------------------------------------------------
+
+
+class TestPruneCommand:
+    # `prune` has no --project; node lookup is by ID with no project filter.
+
+    def _invoke_prune(self, tmp_db: Path, node_id: str) -> object:
+        return runner.invoke(
+            app, ["prune", node_id], env={"CORTEX_DB_PATH": str(tmp_db)}
+        )
+
+    def test_no_db_exits_nonzero(self, tmp_path: Path) -> None:
+        result = runner.invoke(
+            app,
+            ["prune", "00000000-0000-0000-0000-000000000000"],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code != 0
+
+    def test_missing_node_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_prune(tmp_db, "00000000-0000-0000-0000-000000000000")
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+    def test_prune_removes_node(self, tmp_db: Path, project: str) -> None:
+        node_id = _seed_node(tmp_db, project, text="node to be pruned", tier=1)
+        result = self._invoke_prune(tmp_db, node_id)
+        assert result.exit_code == 0
+        assert "Pruned" in result.output
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT id FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        conn.close()
+        assert row is None
+
+    def test_prune_shows_node_text(self, tmp_db: Path, project: str) -> None:
+        node_id = _seed_node(tmp_db, project, text="prune text check", tier=2)
+        result = self._invoke_prune(tmp_db, node_id)
+        assert "prune text check" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex reset
+# ---------------------------------------------------------------------------
+
+
+class TestResetCommand:
+    def test_reset_with_yes_deletes_all_nodes(self, tmp_db: Path, project: str) -> None:
+        for i in range(3):
+            _seed_node(tmp_db, project, text=f"reset node {i}", tier=1)
+        result = runner.invoke(
+            app,
+            ["reset", "--project", project, "--yes"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "Reset complete" in result.output
+        conn = sqlite3.connect(str(tmp_db))
+        count = conn.execute(
+            "SELECT COUNT(*) FROM nodes WHERE project = ?", (project,)
+        ).fetchone()[0]
+        conn.close()
+        assert count == 0
+
+    def test_reset_no_db_exits_cleanly(self, tmp_path: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["reset", "--project", project, "--yes"],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "No Cortex" in result.output
+
+    def test_reset_abort_without_yes(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="should survive", tier=1)
+        result = runner.invoke(
+            app,
+            ["reset", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+            input="n\n",
+        )
+        assert result.exit_code != 0
+        conn = sqlite3.connect(str(tmp_db))
+        count = conn.execute(
+            "SELECT COUNT(*) FROM nodes WHERE project = ?", (project,)
+        ).fetchone()[0]
+        conn.close()
+        assert count == 1
+
+    def test_reset_shows_deleted_count(self, tmp_db: Path, project: str) -> None:
+        for i in range(5):
+            _seed_node(tmp_db, project, text=f"count node {i}", tier=1)
+        result = runner.invoke(
+            app,
+            ["reset", "--project", project, "--yes"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert "5" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex search
+# ---------------------------------------------------------------------------
+
+
+class TestSearchCommand:
+    # `search` has no --project; it uses CWD. Nodes must be seeded with
+    # project=str(Path.cwd()) to be visible to the command.
+
+    @staticmethod
+    def _cwd_project() -> str:
+        return str(Path.cwd())
+
+    def _invoke_search(
+        self, tmp_db: Path, query: str, extra: list[str] | None = None
+    ) -> object:
+        args = ["search", query] + (extra or [])
+        return runner.invoke(app, args, env={"CORTEX_DB_PATH": str(tmp_db)})
+
+    def test_no_db_exits_cleanly(self, tmp_path: Path) -> None:
+        result = runner.invoke(
+            app,
+            ["search", "auth"],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "No Cortex" in result.output
+
+    def test_empty_db_no_nodes(self, tmp_db: Path) -> None:
+        result = self._invoke_search(tmp_db, "auth")
+        assert result.exit_code == 0
+        assert "No nodes" in result.output
+
+    def test_matching_node_in_output(self, tmp_db: Path) -> None:
+        # BM25 needs multiple docs to produce positive IDF scores.
+        cwd_proj = self._cwd_project()
+        _seed_node(tmp_db, cwd_proj, text="authentication middleware is key", tier=1)
+        _seed_node(tmp_db, cwd_proj, text="database connection pool config", tier=1)
+        _seed_node(tmp_db, cwd_proj, text="cache invalidation strategy", tier=1)
+        result = self._invoke_search(tmp_db, "authentication")
+        assert result.exit_code == 0
+        assert "authentication" in result.output
+
+    def test_no_match_shows_no_matching(self, tmp_db: Path) -> None:
+        cwd_proj = self._cwd_project()
+        _seed_node(tmp_db, cwd_proj, text="database connection pool", tier=1)
+        _seed_node(tmp_db, cwd_proj, text="cache invalidation strategy", tier=1)
+        result = self._invoke_search(tmp_db, "xyzzy_not_found")
+        assert result.exit_code == 0
+        assert "No matching" in result.output
+
+    def test_invalid_source_exits_nonzero(self, tmp_db: Path) -> None:
+        _seed_node(tmp_db, self._cwd_project(), text="some node", tier=1)
+        result = self._invoke_search(tmp_db, "auth", ["--source", "invalid_source"])
+        assert result.exit_code != 0
+        assert "Invalid source" in result.output
+
+    def test_source_filter_jsonl(self, tmp_db: Path) -> None:
+        _seed_node(
+            tmp_db,
+            self._cwd_project(),
+            text="jsonl source node about auth",
+            tier=1,
+        )
+        result = self._invoke_search(tmp_db, "auth", ["--source", "jsonl"])
+        assert result.exit_code == 0
+
+    def test_tier_filter(self, tmp_db: Path) -> None:
+        cwd_proj = self._cwd_project()
+        # Need multiple docs in filtered corpus for positive BM25 scores.
+        _seed_node(
+            tmp_db, cwd_proj, text="tier3 auth convention always use tokens", tier=3
+        )
+        _seed_node(tmp_db, cwd_proj, text="tier3 cache policy evict early", tier=3)
+        _seed_node(tmp_db, cwd_proj, text="tier3 database schema migration", tier=3)
+        _seed_node(tmp_db, cwd_proj, text="tier1 auth observation recent", tier=1)
+        result = self._invoke_search(tmp_db, "auth", ["--tier", "3"])
+        assert result.exit_code == 0
+        assert "tier3 auth convention" in result.output
+
+    def test_limit_flag(self, tmp_db: Path) -> None:
+        cwd_proj = self._cwd_project()
+        for i in range(8):
+            _seed_node(tmp_db, cwd_proj, text=f"auth node {i}", tier=1)
+        result = self._invoke_search(tmp_db, "auth", ["--limit", "3"])
+        assert result.exit_code == 0
