@@ -1437,3 +1437,175 @@ class TestSearchCommand:
             _seed_node(tmp_db, cwd_proj, text=f"auth node {i}", tier=1)
         result = self._invoke_search(tmp_db, "auth", ["--limit", "3"])
         assert result.exit_code == 0
+
+
+# cortex status — last-session branch (lines 116-122)
+# ---------------------------------------------------------------------------
+
+
+class TestStatusLastSession:
+    def test_status_shows_last_session_data(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="some node", tier=1)
+        _seed_session(tmp_db, project, tokens_raw=1200, tokens_injected=400)
+        result = runner.invoke(
+            app,
+            ["status", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "Last session" in result.output
+        assert "Nodes written" in result.output
+
+    def test_status_shows_token_savings_when_present(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        _seed_session(tmp_db, project, tokens_raw=900, tokens_injected=300)
+        result = runner.invoke(
+            app,
+            ["status", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "600" in result.output  # 900 - 300
+
+    def test_status_no_session_skips_last_session(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        result = runner.invoke(
+            app,
+            ["status", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "Last session" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex list — validation error paths (lines 826-866)
+# ---------------------------------------------------------------------------
+
+
+class TestListValidation:
+    def _invoke_list(
+        self, tmp_db: Path, project: str, extra: list[str] | None = None
+    ) -> object:
+        args = ["list", "--project", project] + (extra or [])
+        return runner.invoke(app, args, env={"CORTEX_DB_PATH": str(tmp_db)})
+
+    def test_invalid_type_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_list(tmp_db, project, ["--type", "invalid_type"])
+        assert result.exit_code != 0
+        assert "Invalid type" in result.output
+
+    def test_invalid_source_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_list(tmp_db, project, ["--source", "bad_source"])
+        assert result.exit_code != 0
+        assert "Invalid source" in result.output
+
+    def test_invalid_sort_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = self._invoke_list(tmp_db, project, ["--sort", "bad_sort"])
+        assert result.exit_code != 0
+        assert "Invalid sort" in result.output
+
+    def test_valid_type_filter(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="convention node", tier=3)
+        result = self._invoke_list(tmp_db, project, ["--type", "observation"])
+        assert result.exit_code == 0
+
+    def test_valid_sort_created(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="sort by created", tier=1)
+        result = self._invoke_list(tmp_db, project, ["--sort", "created"])
+        assert result.exit_code == 0
+
+    def test_valid_sort_accessed(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="sort by accessed", tier=1)
+        result = self._invoke_list(tmp_db, project, ["--sort", "accessed"])
+        assert result.exit_code == 0
+
+    def test_limit_truncation_shows_message(self, tmp_db: Path, project: str) -> None:
+        for i in range(6):
+            _seed_node(tmp_db, project, text=f"paged node {i}", tier=1)
+        result = self._invoke_list(tmp_db, project, ["--limit", "3"])
+        assert result.exit_code == 0
+        assert "Showing 3 of 6" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex clean — input validation (lines 760-764)
+# ---------------------------------------------------------------------------
+
+
+class TestCleanValidation:
+    def test_days_zero_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["clean", "--project", project, "--days", "0"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+        assert "--days" in result.output
+
+    def test_invalid_tier_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["clean", "--project", project, "--tier", "5"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+        assert "--tier" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex install
+# ---------------------------------------------------------------------------
+
+
+class TestInstallCommand:
+    def test_install_creates_plugin_json(self, tmp_path: Path) -> None:
+        import json
+
+        plugins_dir = tmp_path / ".claude" / "plugins"
+        result = runner.invoke(
+            app,
+            ["install"],
+            env={"HOME": str(tmp_path)},
+        )
+        assert result.exit_code == 0
+        assert "Installed" in result.output
+        manifest = plugins_dir / "cortex.json"
+        assert manifest.exists()
+        data = json.loads(manifest.read_text())
+        assert data["name"] == "cortex"
+        assert "hooks" in data
+
+    def test_install_mentions_restart(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["install"], env={"HOME": str(tmp_path)})
+        assert "Restart" in result.output or "restart" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# cortex doctor — unhealthy path
+# ---------------------------------------------------------------------------
+
+
+class TestDoctorUnhealthyPath:
+    def test_doctor_reports_missing_db(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("CORTEX_DB_PATH", str(tmp_path / "nonexistent.db"))
+        result = runner.invoke(
+            app,
+            ["doctor", "--project", str(tmp_path)],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "not found" in result.output.lower() or "✗" in result.output
+
+    def test_doctor_runs_without_error(self, tmp_path: Path) -> None:
+        result = runner.invoke(
+            app,
+            ["doctor", "--project", str(tmp_path)],
+            env={"CORTEX_DB_PATH": str(tmp_path / "nonexistent.db")},
+        )
+        assert result.exit_code == 0
+        assert "Cortex Doctor" in result.output
