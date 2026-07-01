@@ -918,3 +918,86 @@ class TestConfigMissingLines:
             row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
         }
         assert "nodes_promoted" in existing_after
+
+
+# ---------------------------------------------------------------------------
+# hooks/extract.py — _compute_token_stats line 191: retrieve returns empty
+# ---------------------------------------------------------------------------
+
+
+class TestComputeTokenStatsProjectedEmpty:
+    def test_returns_raw_and_none_when_retrieve_empty(
+        self, graph: Graph, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from hooks import extract as extract_mod
+
+        vec = np.zeros(384, dtype=np.float32)
+        node = Node(
+            id="",
+            type="observation",
+            tier=1,
+            text="some node that survives format but not retrieve",
+            rationale=None,
+            embedding=vec,
+            precision_bits=32,
+            weight=1.0,
+            project="/tmp/test_project",
+            scope="project",
+            source="jsonl",
+            last_accessed=0,
+            created_at=0,
+            session_count=1,
+        )
+        graph.write_node(node)
+
+        monkeypatch.setattr(extract_mod, "retrieve", lambda *a, **kw: [])
+
+        tokens_raw, tokens_injected = extract_mod._compute_token_stats(
+            graph, "/tmp/test_project"
+        )
+        assert tokens_raw is not None
+        assert tokens_raw > 0
+        assert tokens_injected is None
+
+
+# ---------------------------------------------------------------------------
+# __main__ blocks: compact.py:14, inject.py:70, extract.py:234
+# ---------------------------------------------------------------------------
+
+
+class TestHooksMainEntrypoints:
+    def test_inject_main_block_exits_cleanly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import runpy
+
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", str(tmp_path))
+        monkeypatch.setenv("CORTEX_DB_PATH", str(tmp_path / "no_such.db"))
+
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("hooks.inject", run_name="__main__", alter_sys=False)
+        assert exc_info.value.code == 0
+
+    def test_compact_main_block_exits_cleanly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import runpy
+
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", str(tmp_path))
+        monkeypatch.setenv("CORTEX_DB_PATH", str(tmp_path / "no_such.db"))
+
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("hooks.compact", run_name="__main__", alter_sys=False)
+        assert exc_info.value.code == 0
+
+    def test_extract_main_block_skips_without_transcript(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import runpy
+
+        monkeypatch.delenv("CLAUDE_TRANSCRIPT", raising=False)
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", str(tmp_path))
+
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("hooks.extract", run_name="__main__", alter_sys=False)
+        assert exc_info.value.code == 0
