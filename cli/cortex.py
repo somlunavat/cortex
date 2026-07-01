@@ -904,6 +904,34 @@ def list_nodes(
 
 
 @app.command()
+def count(
+    tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all)"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+) -> None:
+    """Print the total number of memory nodes, optionally filtered by tier.
+
+    Exits with code 0 and prints the integer count to stdout.
+    Suitable for scripting: ``cortex count --tier 3``.
+    """
+    if tier not in (0, 1, 2, 3):
+        console.print("[red]--tier must be 0 (all), 1, 2, or 3.[/red]")
+        raise typer.Exit(1)
+
+    g, project = _require_graph(project_path)
+    tier_map = g.get_tier_counts(project)
+
+    if tier == 0:
+        total = sum(cnt for cnt, _ in tier_map.values())
+    else:
+        cnt, _ = tier_map.get(tier, (0, 0.0))
+        total = cnt
+
+    console.print(str(total))
+
+
+@app.command()
 def doctor(
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"
