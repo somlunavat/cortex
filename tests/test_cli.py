@@ -2124,3 +2124,74 @@ class TestTouchCommand:
             env={"CORTEX_DB_PATH": str(tmp_path / "none.db")},
         )
         assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# cortex similar
+# ---------------------------------------------------------------------------
+
+
+class TestSimilarCommand:
+    def test_similar_missing_node_exits_1(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["similar", "00000000-0000-0000-0000-000000000000", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+    def test_similar_node_without_embedding_exits_1(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        node_id = _seed_node(tmp_db, project, text="no-embedding node")
+        conn = sqlite3.connect(str(tmp_db))
+        conn.execute("UPDATE nodes SET embedding = NULL WHERE id = ?", (node_id,))
+        conn.commit()
+        conn.close()
+        result = runner.invoke(
+            app,
+            ["similar", node_id, "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+
+    def test_similar_invalid_threshold_exits_1(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        node_id = _seed_node(tmp_db, project)
+        result = runner.invoke(
+            app,
+            ["similar", node_id, "--threshold", "2.5", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+
+    def test_similar_no_results_above_threshold(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        node_id = _seed_node(tmp_db, project, text="unique lone node")
+        result = runner.invoke(
+            app,
+            ["similar", node_id, "--threshold", "0.9999", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "No similar" in result.output
+
+    def test_similar_finds_close_node(self, tmp_db: Path, project: str) -> None:
+        emb = np.random.default_rng(seed=7).random(384).astype(np.float32)
+        n1 = _seed_node(tmp_db, project, text="node alpha")
+        n2 = _seed_node(tmp_db, project, text="node beta")
+        conn = sqlite3.connect(str(tmp_db))
+        conn.execute("UPDATE nodes SET embedding = ? WHERE id = ?", (emb.tobytes(), n1))
+        conn.execute("UPDATE nodes SET embedding = ? WHERE id = ?", (emb.tobytes(), n2))
+        conn.commit()
+        conn.close()
+        result = runner.invoke(
+            app,
+            ["similar", n1, "--project", project, "--threshold", "0.5"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "node beta" in result.output or "Similar" in result.output
