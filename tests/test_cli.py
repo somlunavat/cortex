@@ -1770,3 +1770,59 @@ class TestDashboardCommand:
         result = runner.invoke(app, ["dashboard"])
         assert result.exit_code != 0
         assert "uvicorn" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# cortex count
+# ---------------------------------------------------------------------------
+
+
+class TestCountCommand:
+    def test_count_empty_db_returns_zero(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["count", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert result.output.strip() == "0"
+
+    def test_count_all_nodes(self, tmp_db: Path, project: str) -> None:
+        for i in range(3):
+            _seed_node(tmp_db, project, text=f"node {i}", tier=1)
+        result = runner.invoke(
+            app,
+            ["count", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert result.output.strip() == "3"
+
+    def test_count_filtered_by_tier(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="tier1 node", tier=1)
+        _seed_node(tmp_db, project, text="tier2 node", tier=2)
+        _seed_node(tmp_db, project, text="tier3 node", tier=3)
+        result = runner.invoke(
+            app,
+            ["count", "--tier", "2", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert result.output.strip() == "1"
+
+    def test_count_invalid_tier_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["count", "--tier", "99", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+        assert "--tier" in result.output.lower() or "tier" in result.output.lower()
+
+    def test_count_no_db_exits_cleanly(self, tmp_path: Path) -> None:
+        result = runner.invoke(
+            app,
+            ["count", "--project", str(tmp_path)],
+            env={"CORTEX_DB_PATH": str(tmp_path / "none.db")},
+        )
+        assert result.exit_code == 0
