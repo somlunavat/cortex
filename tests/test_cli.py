@@ -6,6 +6,7 @@ injected via the CORTEX_DB_PATH environment variable pointing to a temp file.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 import uuid
@@ -505,6 +506,41 @@ class TestListCommand:
         assert result.exit_code == 0
         assert "alpha node" in result.output
         assert "beta node" in result.output
+
+    def test_json_flag_outputs_valid_json(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="json node text", tier=1)
+        result = self._invoke_list(tmp_db, project, ["--json"])
+        assert result.exit_code == 0
+        records = json.loads(result.output)
+        assert isinstance(records, list)
+        assert len(records) == 1
+        assert records[0]["text"] == "json node text"
+        assert records[0]["tier"] == 1
+
+    def test_json_flag_includes_required_fields(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        _seed_node(tmp_db, project, text="field check node", tier=2)
+        result = self._invoke_list(tmp_db, project, ["--json"])
+        records = json.loads(result.output)
+        rec = records[0]
+        for field in ("id", "type", "tier", "text", "weight", "source", "project"):
+            assert field in rec
+
+    def test_json_flag_empty_db_returns_empty_list(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        result = self._invoke_list(tmp_db, project, ["--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+
+    def test_json_flag_respects_tier_filter(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="tier1 only", tier=1)
+        _seed_node(tmp_db, project, text="tier2 only", tier=2)
+        result = self._invoke_list(tmp_db, project, ["--json", "--tier", "1"])
+        records = json.loads(result.output)
+        assert all(r["tier"] == 1 for r in records)
+        assert any(r["text"] == "tier1 only" for r in records)
 
 
 # ---------------------------------------------------------------------------
