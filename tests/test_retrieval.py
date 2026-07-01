@@ -514,3 +514,77 @@ class TestFormatInjectionBlock:
             "auth module refactored\n" in block
             or "auth module refactored)" not in block
         )
+
+
+# ---------------------------------------------------------------------------
+# Parametrized: fuse_scores weight proportions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "v_score, b_score, g_score, expected_approx",
+    [
+        (1.0, 0.0, 0.0, VECTOR_WEIGHT),
+        (0.0, 1.0, 0.0, BM25_WEIGHT),
+        (0.0, 0.0, 1.0, GRAPH_WEIGHT),
+        (1.0, 1.0, 1.0, VECTOR_WEIGHT + BM25_WEIGHT + GRAPH_WEIGHT),
+        (0.0, 0.0, 0.0, 0.0),
+    ],
+)
+def test_fuse_scores_weights(
+    v_score: float,
+    b_score: float,
+    g_score: float,
+    expected_approx: float,
+    rng: np.random.Generator,
+) -> None:
+    e = _random_embedding(rng)
+    node = _make_node("test node", embedding=e)
+    v = [ScoredNode(node=node, score=v_score)]
+    b = [ScoredNode(node=node, score=b_score)]
+    g = [ScoredNode(node=node, score=g_score)]
+    fused = fuse_scores(v, b, g)
+    assert len(fused) == 1
+    assert abs(fused[0].score - expected_approx) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Parametrized: _enforce_budget with varying tier3 and candidate lists
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "n_tier3, n_candidates, budget, expect_at_least",
+    [
+        (0, 0, 1000, 0),
+        (3, 0, 1000, 3),
+        (0, 5, 1000, 5),
+        (2, 3, 1000, 5),
+        (1, 10, 10, 1),
+    ],
+)
+def test_enforce_budget_node_counts(
+    n_tier3: int,
+    n_candidates: int,
+    budget: int,
+    expect_at_least: int,
+    rng: np.random.Generator,
+) -> None:
+    import uuid
+
+    from core.retrieval import _enforce_budget
+
+    def _unique_node(text: str, tier: int) -> Node:
+        node = _make_node(text, tier=tier)
+        return Node(**{**node.__dict__, "id": str(uuid.uuid4())})
+
+    tier3 = [_unique_node(f"convention {i}", tier=3) for i in range(n_tier3)]
+    candidates = [
+        ScoredNode(
+            node=_unique_node(f"candidate {i}", tier=1),
+            score=float(n_candidates - i),
+        )
+        for i in range(n_candidates)
+    ]
+    result = _enforce_budget(tier3, candidates, budget)
+    assert len(result) >= min(expect_at_least, n_tier3 + n_candidates)
