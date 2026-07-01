@@ -847,3 +847,119 @@ class TestProcessSentenceExtra:
         score = _score_durability(sent, NodeType.CONVENTION)
         # baseline 0.5 + convention 0.3 + never 0.2 = 1.0
         assert score >= 1.0
+
+
+# ---------------------------------------------------------------------------
+# _diff_ast_changes — file-not-found branch (line 228)
+# _tree_sitter_diff — import error (257-259) and parse error (272-274)
+# _tree_sitter_diff — class removed branch (line 290)
+# _compute_file_churn — commit diff OSError (lines 428-429)
+# ---------------------------------------------------------------------------
+
+
+class TestAstChannelGaps:
+    def test_diff_file_ast_missing_file_returns_empty(self, tmp_path: Path) -> None:
+        import git
+
+        from core.extractor import _diff_file_ast
+
+        repo = git.Repo.init(str(tmp_path))
+        repo.config_writer().set_value("user", "name", "T").release()
+        repo.config_writer().set_value("user", "email", "t@t.com").release()
+        f = tmp_path / "a.py"
+        f.write_text("x = 1")
+        repo.index.add(["a.py"])
+        repo.index.commit("init")
+        # File exists in git HEAD but deleted on disk → line 228
+        f.unlink()
+
+        result = _diff_file_ast(f, str(tmp_path))
+        assert result == []
+
+    def test_tree_sitter_diff_import_error_returns_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import builtins
+
+        from core.extractor import _tree_sitter_diff
+
+        real_import = builtins.__import__
+
+        def block(name: str, *a: object, **kw: object) -> object:
+            if name in ("tree_sitter_python", "tree_sitter"):
+                raise ImportError("not installed")
+            return real_import(name, *a, **kw)
+
+        monkeypatch.setattr(builtins, "__import__", block)
+        result = _tree_sitter_diff("x = 1", "x = 2", "python")
+        assert result == []
+
+    def test_tree_sitter_diff_parse_exception_returns_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        try:
+            import tree_sitter
+
+            from core.extractor import _tree_sitter_diff
+        except ImportError:
+            pytest.skip("tree-sitter not available")
+
+        original_parser = tree_sitter.Parser
+
+        class BrokenParser:
+            def __init__(self, *a: object, **kw: object) -> None:
+                raise RuntimeError("parser init failed")
+
+        monkeypatch.setattr(tree_sitter, "Parser", BrokenParser)
+        result = _tree_sitter_diff("def foo(): pass", "def bar(): pass", "python")
+        assert result == []
+        monkeypatch.setattr(tree_sitter, "Parser", original_parser)
+
+    def test_tree_sitter_diff_detects_removed_class(self) -> None:
+        try:
+            from core.extractor import _tree_sitter_diff
+        except ImportError:
+            pytest.skip("tree-sitter not available")
+
+        try:
+            import tree_sitter_python  # noqa: F401
+        except ImportError:
+            pytest.skip("tree-sitter not available")
+
+        before = "class MyModel:\n    pass\n"
+        after = "# removed\n"
+        changes = _tree_sitter_diff(before, after, "python")
+        removed = [
+            c for c in changes if c["action"] == "removed" and c["kind"] == "class"
+        ]
+        assert any(c["name"] == "MyModel" for c in removed)
+
+    def test_compute_file_churn_swallows_diff_oserror(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import git
+
+        from core.extractor import _compute_file_churn
+
+        repo = git.Repo.init(str(tmp_path))
+        repo.config_writer().set_value("user", "name", "T").release()
+        repo.config_writer().set_value("user", "email", "t@t.com").release()
+        f = tmp_path / "a.py"
+        f.write_text("x = 1")
+        repo.index.add(["a.py"])
+        repo.index.commit("first")
+        f.write_text("x = 2")
+        repo.index.add(["a.py"])
+        repo.index.commit("second")
+
+        # Make commit.diff raise OSError — lines 428-429 swallow it
+        commits = list(repo.iter_commits(max_count=10))
+        original_diff = commits[0].__class__.diff
+
+        def bad_diff(self: object, *a: object, **kw: object) -> None:
+            raise OSError("disk failure")
+
+        monkeypatch.setattr(commits[0].__class__, "diff", bad_diff)
+        result = _compute_file_churn(repo, lookback=10, threshold=0.0)
+        assert isinstance(result, dict)
+        monkeypatch.setattr(commits[0].__class__, "diff", original_diff)
