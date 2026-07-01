@@ -135,6 +135,9 @@ def status(
 @app.command()
 def recent(
     limit: int = typer.Option(10, "--limit", "-n", help="Number of nodes to show"),
+    output_json: bool = typer.Option(
+        False, "--json", help="Output nodes as JSON instead of a table"
+    ),
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"
     ),
@@ -147,8 +150,32 @@ def recent(
     nodes = g.get_recent_nodes(project, limit=limit)
 
     if not nodes:
-        console.print("[dim]No nodes found.[/dim]")
+        if output_json:
+            print("[]")
+        else:
+            console.print("[dim]No nodes found.[/dim]")
         raise typer.Exit(0)
+
+    if output_json:
+        records = [
+            {
+                "id": node.id,
+                "type": node.type,
+                "tier": node.tier,
+                "text": node.text,
+                "rationale": node.rationale,
+                "weight": node.weight,
+                "session_count": node.session_count,
+                "source": node.source,
+                "scope": node.scope,
+                "project": node.project,
+                "last_accessed": node.last_accessed,
+                "created_at": node.created_at,
+            }
+            for node in nodes
+        ]
+        print(json.dumps(records, indent=2))
+        return
 
     table = Table(title=f"Recently accessed — {project}")
     table.add_column("Accessed", style="cyan", no_wrap=True)
