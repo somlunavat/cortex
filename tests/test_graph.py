@@ -1283,3 +1283,215 @@ class TestQueryNodesPage:
         )
         assert total == 1
         assert nodes[0].text == "a"
+
+
+# ---------------------------------------------------------------------------
+# find_similar — validation guards (lines 266, 268)
+# ---------------------------------------------------------------------------
+
+
+class TestFindSimilarValidation:
+    def test_threshold_below_zero_raises(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        with pytest.raises(ValueError, match="threshold"):
+            graph.find_similar(dummy_embedding, TEST_PROJECT, threshold=-0.1, limit=10)
+
+    def test_threshold_above_one_raises(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        with pytest.raises(ValueError, match="threshold"):
+            graph.find_similar(dummy_embedding, TEST_PROJECT, threshold=1.1, limit=10)
+
+    def test_limit_zero_raises(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        with pytest.raises(ValueError, match="limit"):
+            graph.find_similar(dummy_embedding, TEST_PROJECT, threshold=0.9, limit=0)
+
+    def test_limit_negative_raises(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        with pytest.raises(ValueError, match="limit"):
+            graph.find_similar(dummy_embedding, TEST_PROJECT, threshold=0.9, limit=-1)
+
+    def test_node_with_null_embedding_skipped(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        # Write a node without embedding; find_similar should skip it (line 279)
+        import time
+        import uuid
+
+        node_id = str(uuid.uuid4())
+        now = int(time.time())
+        graph._conn.execute(
+            """INSERT INTO nodes (id, type, tier, text, rationale, embedding,
+               precision_bits, weight, project, scope, source, last_accessed,
+               created_at, session_count)
+               VALUES (?, 'observation', 1, 'no embed', NULL, NULL, 32, 1.0,
+               ?, 'project', 'jsonl', ?, ?, 1)""",
+            (node_id, TEST_PROJECT, now, now),
+        )
+        graph._conn.commit()
+        results = graph.find_similar(
+            dummy_embedding, TEST_PROJECT, threshold=0.0, limit=100
+        )
+        # Node without embedding should not appear in results
+        assert all(n.id != node_id for n in results)
+
+
+# ---------------------------------------------------------------------------
+# delete_node — empty-id guard (line 354)
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteNodeGuard:
+    def test_delete_node_empty_string_is_noop(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        graph.delete_node("")
+        # Original node should still exist
+        assert graph.get_node(node_id) is not None
+
+    def test_delete_node_valid_id_removes_node(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        graph.delete_node(node_id)
+        assert graph.get_node(node_id) is None
+
+
+# ---------------------------------------------------------------------------
+# write_session — validation guards (lines 530, 534)
+# ---------------------------------------------------------------------------
+
+
+class TestWriteSessionValidation:
+    def test_ended_before_started_raises(self, graph: Graph) -> None:
+        import uuid
+
+        with pytest.raises(ValueError, match="ended_at"):
+            graph.write_session(
+                session_id=str(uuid.uuid4()),
+                project=TEST_PROJECT,
+                started_at=2000,
+                ended_at=1999,
+                nodes_written=0,
+                nodes_evicted=0,
+                nodes_promoted=0,
+                transcript_path="/tmp/t.jsonl",
+            )
+
+    def test_negative_nodes_written_raises(self, graph: Graph) -> None:
+        import time
+        import uuid
+
+        now = int(time.time())
+        with pytest.raises(ValueError, match="non-negative"):
+            graph.write_session(
+                session_id=str(uuid.uuid4()),
+                project=TEST_PROJECT,
+                started_at=now - 10,
+                ended_at=now,
+                nodes_written=-1,
+                nodes_evicted=0,
+                nodes_promoted=0,
+                transcript_path="/tmp/t.jsonl",
+            )
+
+    def test_negative_nodes_evicted_raises(self, graph: Graph) -> None:
+        import time
+        import uuid
+
+        now = int(time.time())
+        with pytest.raises(ValueError, match="non-negative"):
+            graph.write_session(
+                session_id=str(uuid.uuid4()),
+                project=TEST_PROJECT,
+                started_at=now - 10,
+                ended_at=now,
+                nodes_written=0,
+                nodes_evicted=-1,
+                nodes_promoted=0,
+                transcript_path="/tmp/t.jsonl",
+            )
+
+
+# ---------------------------------------------------------------------------
+# _enforce_budget — tier-3 ids already included branch (line 245-246)
+# ---------------------------------------------------------------------------
+
+
+class TestEnforceBudgetSkipDuplicates:
+    def test_tier3_nodes_not_duplicated_in_result(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        # Build a tier-3 node and a ScoredNode referencing the same object
+        from core.graph import Node
+        from core.retrieval import ScoredNode, _enforce_budget
+
+        node = _make_node(dummy_embedding)
+        node_id = graph.write_node(node)
+        fetched = graph.get_node(node_id)
+        assert fetched is not None
+        fetched_tier3 = Node(
+            id=fetched.id,
+            type=fetched.type,
+            tier=3,
+            text=fetched.text,
+            rationale=fetched.rationale,
+            embedding=fetched.embedding,
+            precision_bits=fetched.precision_bits,
+            weight=fetched.weight,
+            project=fetched.project,
+            scope=fetched.scope,
+            source=fetched.source,
+            last_accessed=fetched.last_accessed,
+            created_at=fetched.created_at,
+            session_count=fetched.session_count,
+        )
+        # Put the same node into both tier3 and fused_candidates
+        scored = ScoredNode(node=fetched_tier3, score=0.9)
+        result = _enforce_budget(
+            tier3=[fetched_tier3],
+            fused_candidates=[scored],
+            budget_tokens=10000,
+        )
+        count = sum(1 for n in result if n.id == fetched.id)
+        assert count == 1, "same node should not appear twice"
+
+
+# ---------------------------------------------------------------------------
+# _meets_promotion_criteria — tier >= 3 returns False (line 75)
+# ---------------------------------------------------------------------------
+
+
+class TestMeetsPromotionCriteriaTier3:
+    def test_tier3_node_never_meets_criteria(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        from core.decay import _meets_promotion_criteria
+        from core.graph import Node
+
+        node = _make_node(dummy_embedding)
+        node_id = graph.write_node(node)
+        fetched = graph.get_node(node_id)
+        assert fetched is not None
+        tier3_node = Node(
+            id=fetched.id,
+            type=fetched.type,
+            tier=3,
+            text=fetched.text,
+            rationale=fetched.rationale,
+            embedding=fetched.embedding,
+            precision_bits=fetched.precision_bits,
+            weight=fetched.weight,
+            project=fetched.project,
+            scope=fetched.scope,
+            source=fetched.source,
+            last_accessed=fetched.last_accessed,
+            created_at=fetched.created_at,
+            session_count=fetched.session_count,
+        )
+        assert (
+            _meets_promotion_criteria(tier3_node, decayed_weight=99.0, now=0) is False
+        )

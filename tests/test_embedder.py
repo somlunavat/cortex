@@ -257,3 +257,115 @@ class TestQuantizationHelpers:
 
     def test_embedding_dim_returns_384(self) -> None:
         assert embedding_dim() == 384
+
+
+# ---------------------------------------------------------------------------
+# Fallback paths when model unavailable (lines 34-36, 58, 72-74, 91, 101-103)
+# ---------------------------------------------------------------------------
+
+
+class TestEmbedFallbacks:
+    def test_embed_returns_zero_vector_when_model_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import core.embedder as emb_mod
+
+        monkeypatch.setattr(emb_mod, "_model", None)
+        monkeypatch.setattr(emb_mod, "_model_loaded", True)
+        result = emb_mod.embed("some text")
+        assert result.shape == (384,)
+        assert np.all(result == 0.0)
+
+    def test_embed_batch_returns_zero_vectors_when_model_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import core.embedder as emb_mod
+
+        monkeypatch.setattr(emb_mod, "_model", None)
+        monkeypatch.setattr(emb_mod, "_model_loaded", True)
+        results = emb_mod.embed_batch(["text one", "text two"])
+        assert len(results) == 2
+        for arr in results:
+            assert arr.shape == (384,)
+            assert np.all(arr == 0.0)
+
+    def test_get_model_returns_none_on_import_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import builtins
+
+        import core.embedder as emb_mod
+
+        original_loaded = emb_mod._model_loaded
+        original_model = emb_mod._model
+        monkeypatch.setattr(emb_mod, "_model_loaded", False)
+        monkeypatch.setattr(emb_mod, "_model", None)
+
+        real_import = builtins.__import__
+
+        def block_st(name: str, *args: object, **kwargs: object) -> object:
+            if name == "sentence_transformers":
+                raise ImportError("not installed")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", block_st)
+        result = emb_mod._get_model()
+        assert result is None
+        monkeypatch.setattr(emb_mod, "_model_loaded", original_loaded)
+        monkeypatch.setattr(emb_mod, "_model", original_model)
+
+    def test_embed_handles_runtime_error_from_encode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import core.embedder as emb_mod
+
+        class _FakeModel:
+            def encode(self, *a: object, **kw: object) -> None:
+                raise RuntimeError("CUDA OOM")
+
+        monkeypatch.setattr(emb_mod, "_model", _FakeModel())
+        monkeypatch.setattr(emb_mod, "_model_loaded", True)
+        result = emb_mod.embed("test text")
+        assert result.shape == (384,)
+        assert np.all(result == 0.0)
+
+    def test_embed_batch_handles_runtime_error_from_encode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import core.embedder as emb_mod
+
+        class _FakeModel:
+            def encode(self, *a: object, **kw: object) -> None:
+                raise RuntimeError("CUDA OOM")
+
+        monkeypatch.setattr(emb_mod, "_model", _FakeModel())
+        monkeypatch.setattr(emb_mod, "_model_loaded", True)
+        results = emb_mod.embed_batch(["text a", "text b"])
+        assert len(results) == 2
+        assert all(np.all(r == 0.0) for r in results)
+
+    def test_embed_batch_squeezes_2d_output(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import core.embedder as emb_mod
+
+        class _FakeModel:
+            def encode(self, texts: list[str], **kw: object) -> np.ndarray:
+                return np.ones((len(texts), 1, 384), dtype=np.float32)
+
+        monkeypatch.setattr(emb_mod, "_model", _FakeModel())
+        monkeypatch.setattr(emb_mod, "_model_loaded", True)
+        results = emb_mod.embed_batch(["a"])
+        assert results[0].shape == (384,)
+
+    def test_embed_squeezes_2d_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import core.embedder as emb_mod
+
+        class _FakeModel:
+            def encode(self, text: str, **kw: object) -> np.ndarray:
+                return np.ones((1, 384), dtype=np.float32)
+
+        monkeypatch.setattr(emb_mod, "_model", _FakeModel())
+        monkeypatch.setattr(emb_mod, "_model_loaded", True)
+        result = emb_mod.embed("test")
+        assert result.shape == (384,)
