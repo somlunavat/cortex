@@ -872,3 +872,49 @@ class TestExtractMainGraphNone:
         assert result == 1
         captured = capsys.readouterr()
         assert "could not open graph" in captured.err
+
+
+# ---------------------------------------------------------------------------
+# cli/config.py — default db_path (line 47) and migration actual add (92-95)
+# ---------------------------------------------------------------------------
+
+
+class TestConfigMissingLines:
+    def test_db_path_default_when_no_override(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cli.config import db_path
+
+        monkeypatch.delenv("CORTEX_DB_PATH", raising=False)
+        result = db_path(tmp_path)
+        assert result == tmp_path / ".cortex" / "cortex.db"
+
+    def test_apply_migrations_adds_column_when_missing(self, tmp_path: Path) -> None:
+        from cli.config import _apply_migrations
+
+        # Build a sessions table that is missing nodes_promoted
+        conn = sqlite3.connect(str(tmp_path / "old.db"))
+        conn.execute("""
+            CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                project TEXT NOT NULL,
+                started_at INTEGER NOT NULL,
+                ended_at INTEGER NOT NULL,
+                nodes_written INTEGER NOT NULL DEFAULT 0,
+                nodes_evicted INTEGER NOT NULL DEFAULT 0,
+                transcript_path TEXT
+            )
+        """)
+        conn.commit()
+
+        existing_before = {
+            row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+        }
+        assert "nodes_promoted" not in existing_before
+
+        _apply_migrations(conn)
+
+        existing_after = {
+            row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+        }
+        assert "nodes_promoted" in existing_after
