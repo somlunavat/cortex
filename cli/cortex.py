@@ -959,6 +959,29 @@ def count(
 
 
 @app.command()
+def touch(
+    node_id: str = typer.Argument(..., help="Node UUID to refresh"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+) -> None:
+    """Refresh last_accessed timestamp and bump weight for a node.
+
+    Useful when a node should be reinforced without waiting for the next
+    session start. Equivalent to the node being retrieved in an inject pass.
+    """
+    import time
+
+    g, _project = _require_graph(project_path)
+    node = g.get_node(node_id)
+    if node is None:
+        console.print(f"[red]Node not found:[/red] {node_id}")
+        raise typer.Exit(1)
+    g.touch_nodes([node_id], now=int(time.time()))
+    console.print(f"[green]Touched[/green] {node_id[:8]}…  (weight +0.1)")
+
+
+@app.command()
 def doctor(
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"

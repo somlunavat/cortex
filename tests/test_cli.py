@@ -2051,3 +2051,76 @@ class TestCortexMainBlock:
         with pytest.raises(SystemExit) as exc_info:
             runpy.run_module("cli.cortex", run_name="__main__", alter_sys=False)
         assert exc_info.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# cortex touch
+# ---------------------------------------------------------------------------
+
+
+class TestTouchCommand:
+    def test_touch_updates_last_accessed(self, tmp_db: Path, project: str) -> None:
+        import sqlite3
+        import time
+
+        node_id = _seed_node(tmp_db, project)
+        old_ts = (
+            sqlite3.connect(str(tmp_db))
+            .execute("SELECT last_accessed FROM nodes WHERE id = ?", (node_id,))
+            .fetchone()[0]
+        )
+
+        time.sleep(0.01)
+        result = runner.invoke(
+            app,
+            ["touch", node_id, "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "Touched" in result.output
+
+        new_ts = (
+            sqlite3.connect(str(tmp_db))
+            .execute("SELECT last_accessed FROM nodes WHERE id = ?", (node_id,))
+            .fetchone()[0]
+        )
+        assert new_ts >= old_ts
+
+    def test_touch_bumps_weight(self, tmp_db: Path, project: str) -> None:
+        import sqlite3
+
+        node_id = _seed_node(tmp_db, project)
+        old_w = (
+            sqlite3.connect(str(tmp_db))
+            .execute("SELECT weight FROM nodes WHERE id = ?", (node_id,))
+            .fetchone()[0]
+        )
+
+        runner.invoke(
+            app,
+            ["touch", node_id, "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        new_w = (
+            sqlite3.connect(str(tmp_db))
+            .execute("SELECT weight FROM nodes WHERE id = ?", (node_id,))
+            .fetchone()[0]
+        )
+        assert abs(new_w - (old_w + 0.1)) < 1e-6
+
+    def test_touch_missing_node_exits_1(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["touch", "00000000-0000-0000-0000-000000000000", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+    def test_touch_no_db_exits_cleanly(self, tmp_path: Path) -> None:
+        result = runner.invoke(
+            app,
+            ["touch", "some-id", "--project", str(tmp_path)],
+            env={"CORTEX_DB_PATH": str(tmp_path / "none.db")},
+        )
+        assert result.exit_code == 0
