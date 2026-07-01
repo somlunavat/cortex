@@ -628,3 +628,189 @@ class TestHelpersCoverage:
         )
         assert rationale is not None
         assert "infra" in rationale
+
+
+# ---------------------------------------------------------------------------
+# nlp_channel — spaCy unavailable path (lines 479-481, 628-629)
+# ---------------------------------------------------------------------------
+
+
+class TestNlpChannelFallback:
+    def test_nlp_channel_returns_empty_when_nlp_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import core.extractor as ext_mod
+
+        monkeypatch.setattr(ext_mod, "_nlp", False)
+        monkeypatch.setattr(ext_mod, "_model_loaded", False, raising=False)
+        result = ext_mod.nlp_channel(["we always use async"], "/tmp/proj")
+        assert result == []
+        monkeypatch.setattr(ext_mod, "_nlp", None)
+
+    def test_get_nlp_logs_warning_on_import_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import core.extractor as ext_mod
+
+        original_nlp = ext_mod._nlp
+        monkeypatch.setattr(ext_mod, "_nlp", None)
+
+        import builtins
+
+        real_import = builtins.__import__
+
+        def mock_import(name: str, *args: object, **kwargs: object) -> object:
+            if name == "spacy":
+                raise ImportError("spacy not installed")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        result = ext_mod._get_nlp()
+        assert result is None
+        monkeypatch.setattr(ext_mod, "_nlp", original_nlp)
+
+
+# ---------------------------------------------------------------------------
+# _process_sentence — unclassified branch (line 512) and _process_turn
+# retracted turn (line 575)
+# ---------------------------------------------------------------------------
+
+
+class TestProcessSentenceAndTurn:
+    def test_process_sentence_returns_none_for_generic_text(self) -> None:
+        from core.extractor import _get_nlp, _process_sentence
+
+        nlp = _get_nlp()
+        if nlp is None:
+            pytest.skip("spaCy not available")
+        doc = nlp("The sky is blue and the grass is green.")
+        for sent in doc.sents:
+            result = _process_sentence(sent, "/tmp/proj")
+            assert result is None
+
+    def test_process_turn_returns_empty_for_retracted_turn(self) -> None:
+        from core.extractor import _get_nlp, _process_turn
+
+        nlp = _get_nlp()
+        if nlp is None:
+            pytest.skip("spaCy not available")
+        result = _process_turn(nlp, "actually, let's not do that", "/tmp/proj")
+        assert result == []
+
+    def test_process_sentence_convention_node_returned(self) -> None:
+        from core.extractor import _get_nlp, _process_sentence
+
+        nlp = _get_nlp()
+        if nlp is None:
+            pytest.skip("spaCy not available")
+        doc = nlp("We always use async/await for all I/O operations.")
+        results = [_process_sentence(s, "/tmp/proj") for s in doc.sents]
+        non_none = [r for r in results if r is not None]
+        assert len(non_none) >= 1
+        assert any(r.type == "convention" for r in non_none)
+
+    def test_process_turn_retracted_whole_turn(self) -> None:
+        from core.extractor import _get_nlp, _process_turn
+
+        nlp = _get_nlp()
+        if nlp is None:
+            pytest.skip("spaCy not available")
+        result = _process_turn(
+            nlp,
+            "Hmm, ignore that. Actually scratch that plan.",
+            "/tmp/proj",
+        )
+        assert isinstance(result, list)
+
+
+# ---------------------------------------------------------------------------
+# _compute_file_churn — empty repo branch (line 421)
+# ---------------------------------------------------------------------------
+
+
+class TestComputeFileChurn:
+    def test_churn_zero_commits_returns_empty_dict(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import git
+
+        from core.extractor import _compute_file_churn
+
+        repo = git.Repo.init(str(tmp_path))
+
+        monkeypatch.setattr(repo.__class__, "iter_commits", lambda *a, **kw: iter([]))
+        result = _compute_file_churn(repo, lookback=10, threshold=0.5)
+        assert result == {}
+
+    def test_churn_with_single_file_modified_every_commit(self, tmp_path: Path) -> None:
+        import git
+
+        from core.extractor import _compute_file_churn
+
+        repo = git.Repo.init(str(tmp_path))
+        repo.config_writer().set_value("user", "name", "Test").release()
+        repo.config_writer().set_value("user", "email", "t@t.com").release()
+        hot = tmp_path / "hot.py"
+        for i in range(5):
+            hot.write_text(f"x = {i}")
+            repo.index.add(["hot.py"])
+            repo.index.commit(f"change {i}")
+        result = _compute_file_churn(repo, lookback=5, threshold=0.5)
+        assert "hot.py" in result
+        assert result["hot.py"] > 0.5
+
+
+# ---------------------------------------------------------------------------
+# git_channel — ImportError branch (lines 358-360) and OSError (388-389)
+# ---------------------------------------------------------------------------
+
+
+class TestGitChannelEdgeCases:
+    def test_git_channel_returns_empty_on_import_error(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import builtins
+
+        import core.extractor as ext_mod
+
+        real_import = builtins.__import__
+
+        def block_git(name: str, *args: object, **kwargs: object) -> object:
+            if name == "git":
+                raise ImportError("gitpython not installed")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", block_git)
+        result = ext_mod.git_channel(tmp_path, session_start=0)
+        assert result == []
+
+    def test_git_channel_skips_non_git_dir(self, tmp_path: Path) -> None:
+        from core.extractor import git_channel
+
+        result = git_channel(tmp_path, session_start=0)
+        assert result == []
+
+    def test_git_channel_commit_error_is_swallowed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import git
+
+        from core.extractor import git_channel
+
+        repo = git.Repo.init(str(tmp_path))
+        repo.config_writer().set_value("user", "name", "Test").release()
+        repo.config_writer().set_value("user", "email", "t@t.com").release()
+        f = tmp_path / "a.py"
+        f.write_text("x = 1")
+        repo.index.add(["a.py"])
+        repo.index.commit("init")
+
+        original_iter = repo.__class__.iter_commits
+
+        def bad_iter(self: object, *a: object, **kw: object) -> None:
+            raise OSError("disk error")
+
+        monkeypatch.setattr(repo.__class__, "iter_commits", bad_iter)
+        result = git_channel(tmp_path, session_start=0)
+        assert isinstance(result, list)
+        monkeypatch.setattr(repo.__class__, "iter_commits", original_iter)
