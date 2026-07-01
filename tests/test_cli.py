@@ -1609,3 +1609,164 @@ class TestDoctorUnhealthyPath:
         )
         assert result.exit_code == 0
         assert "Cortex Doctor" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex import — non-list JSON and non-dict records (lines 556-557, 576-577)
+# cortex import — invalid type/scope/source coercion (lines 594, 598, 602)
+# ---------------------------------------------------------------------------
+
+
+class TestImportEdgeCases:
+    def _make_json_file(self, tmp_path: Path, content: str) -> Path:
+        p = tmp_path / "data.json"
+        p.write_text(content)
+        return p
+
+    def test_non_list_json_exits_nonzero(
+        self, tmp_db: Path, project: str, tmp_path: Path
+    ) -> None:
+        f = self._make_json_file(tmp_path, '{"not": "a list"}')
+        result = runner.invoke(
+            app,
+            ["import-", str(f), "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+        assert "JSON array" in result.output or "Expected" in result.output
+
+    def test_non_dict_record_is_skipped(
+        self, tmp_db: Path, project: str, tmp_path: Path
+    ) -> None:
+        f = self._make_json_file(
+            tmp_path, '[42, "a string", {"text": "valid node", "tier": 1}]'
+        )
+        result = runner.invoke(
+            app,
+            ["import-", str(f), "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "2 skipped" in result.output
+        assert "Imported 1" in result.output
+
+    def test_invalid_node_type_coerced_to_observation(
+        self, tmp_db: Path, project: str, tmp_path: Path
+    ) -> None:
+        f = self._make_json_file(
+            tmp_path,
+            '[{"text": "coerce type", "type": "bogus_type", "tier": 1}]',
+        )
+        result = runner.invoke(
+            app,
+            ["import-", str(f), "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "Imported 1" in result.output
+
+    def test_invalid_scope_coerced_to_project(
+        self, tmp_db: Path, project: str, tmp_path: Path
+    ) -> None:
+        f = self._make_json_file(
+            tmp_path,
+            '[{"text": "coerce scope", "scope": "invalid_scope", "tier": 1}]',
+        )
+        result = runner.invoke(
+            app,
+            ["import-", str(f), "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "Imported 1" in result.output
+
+    def test_invalid_source_coerced_to_jsonl(
+        self, tmp_db: Path, project: str, tmp_path: Path
+    ) -> None:
+        f = self._make_json_file(
+            tmp_path,
+            '[{"text": "coerce source", "source": "unknown_src", "tier": 1}]',
+        )
+        result = runner.invoke(
+            app,
+            ["import-", str(f), "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "Imported 1" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex graph — node with edges shows neighbour in output (lines 182-187)
+# ---------------------------------------------------------------------------
+
+
+class TestGraphWithEdges:
+    def test_node_with_edge_shows_neighbour(self, tmp_db: Path) -> None:
+
+        cwd_proj = str(Path.cwd())
+        id_a = _seed_node(tmp_db, cwd_proj, text="auth middleware logic", tier=1)
+        id_b = _seed_node(tmp_db, cwd_proj, text="session token handler", tier=1)
+
+        conn = sqlite3.connect(str(tmp_db))
+        conn.execute(
+            "INSERT INTO edges (source_id, target_id, strength, last_seen) VALUES (?, ?, 1.0, 0)",
+            (id_a, id_b),
+        )
+        conn.commit()
+        conn.close()
+
+        result = runner.invoke(app, ["graph"], env={"CORTEX_DB_PATH": str(tmp_db)})
+        assert result.exit_code == 0
+        assert "auth middleware" in result.output
+        assert "session token" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex rationale — update_node_rationale failure path (lines 702-703)
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotateFailurePath:
+    def test_annotate_exits_nonzero_when_node_missing(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        fake_id = "00000000-0000-0000-0000-000000000000"
+        result = runner.invoke(
+            app,
+            [
+                "annotate",
+                fake_id,
+                "--rationale",
+                "some new rationale",
+                "--project",
+                project,
+            ],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# cortex dashboard — uvicorn ImportError path (lines 1034-1036)
+# ---------------------------------------------------------------------------
+
+
+class TestDashboardCommand:
+    def test_dashboard_exits_1_without_uvicorn(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import builtins
+
+        real_import = builtins.__import__
+
+        def block_uvicorn(name: str, *args: object, **kwargs: object) -> object:
+            if name == "uvicorn":
+                raise ImportError("no module named uvicorn")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", block_uvicorn)
+        result = runner.invoke(app, ["dashboard"])
+        assert result.exit_code != 0
+        assert "uvicorn" in result.output.lower()
