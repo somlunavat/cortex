@@ -119,6 +119,10 @@ class Graph:
         self._conn = connection
         self._conn.row_factory = sqlite3.Row
 
+    def _exec_nodes(self, sql: str, params: list[Any]) -> list[Node]:
+        """Execute a SELECT query and return the results as Node objects."""
+        return [_row_to_node(row) for row in self._conn.execute(sql, params).fetchall()]
+
     # ------------------------------------------------------------------
     # Nodes
     # ------------------------------------------------------------------
@@ -314,11 +318,10 @@ class Graph:
             List of Node objects for the project, ordered by weight DESC.
         """
         where, params = _node_filter(project, tier=tier)
-        rows = self._conn.execute(
+        return self._exec_nodes(
             f"SELECT * FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
             params,
-        ).fetchall()
-        return [_row_to_node(row) for row in rows]
+        )
 
     def get_nodes_by_source(
         self, project: str, source: str, tier: int | None = None
@@ -336,11 +339,10 @@ class Graph:
             List of Node objects, ordered by weight DESC.
         """
         where, params = _node_filter(project, source=source, tier=tier)
-        rows = self._conn.execute(
+        return self._exec_nodes(
             f"SELECT * FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
             params,
-        ).fetchall()
-        return [_row_to_node(row) for row in rows]
+        )
 
     def delete_node(self, node_id: str) -> None:
         """Delete a node and all its edges (CASCADE).
@@ -637,11 +639,10 @@ class Graph:
             where += " AND tier < 3"
         where += " AND last_accessed < ?"
         params.append(cutoff)
-        rows = self._conn.execute(
+        return self._exec_nodes(
             f"SELECT * FROM nodes WHERE {where} ORDER BY last_accessed ASC",  # nosec B608
             params,
-        ).fetchall()
-        return [_row_to_node(row) for row in rows]
+        )
 
     def delete_nodes_bulk(self, node_ids: list[str]) -> int:
         """Delete multiple nodes by ID in a single SQL statement.
@@ -756,13 +757,12 @@ class Graph:
             project: Absolute project path.
             limit: Maximum number of nodes to return.
         """
-        rows = self._conn.execute(
+        return self._exec_nodes(
             "SELECT id, type, tier, text, rationale, embedding, precision_bits, "
             "weight, project, scope, source, last_accessed, created_at, session_count "
             "FROM nodes WHERE project = ? ORDER BY last_accessed DESC LIMIT ?",
-            (project, limit),
-        ).fetchall()
-        return [_row_to_node(row) for row in rows]
+            [project, limit],
+        )
 
     def get_session_records(
         self, project: str, limit: int = 50
@@ -860,6 +860,5 @@ class Graph:
 
         page_sql = f"SELECT id, type, tier, text, rationale, embedding, precision_bits, weight, project, scope, source, last_accessed, created_at, session_count FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?"  # nosec B608
         count_sql = f"SELECT COUNT(*) FROM nodes WHERE {where}"  # nosec B608
-        rows = self._conn.execute(page_sql, [*params, limit]).fetchall()
         total: int = self._conn.execute(count_sql, params).fetchone()[0]
-        return [_row_to_node(row) for row in rows], total
+        return self._exec_nodes(page_sql, [*params, limit]), total
