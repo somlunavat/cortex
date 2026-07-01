@@ -279,9 +279,7 @@ class Graph:
         scored: list[tuple[float, Node]] = []
         for row in rows:
             node = _row_to_node(row)
-            if node.embedding is None:
-                continue
-            sim = cosine_similarity(embedding, node.embedding)
+            sim = cosine_similarity(embedding, node.embedding)  # type: ignore[arg-type]
             if sim >= threshold:
                 scored.append((sim, node))
 
