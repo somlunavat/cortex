@@ -1331,7 +1331,9 @@ class TestFindSimilarValidation:
             (node_id, TEST_PROJECT, now, now),
         )
         graph._conn.commit()
-        results = graph.find_similar(dummy_embedding, TEST_PROJECT, threshold=0.0, limit=100)
+        results = graph.find_similar(
+            dummy_embedding, TEST_PROJECT, threshold=0.0, limit=100
+        )
         # Node without embedding should not appear in results
         assert all(n.id != node_id for n in results)
 
