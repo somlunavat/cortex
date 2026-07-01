@@ -33,6 +33,12 @@ TIER2_PROMOTION_AGE_DAYS: int = 14
 
 SECONDS_PER_DAY: int = 86_400
 
+# Promotion targets: {from_tier: (to_tier, precision_bits)}
+_PROMOTION_TARGET: dict[int, tuple[int, int]] = {
+    1: (2, 8),
+    2: (3, 2),
+}
+
 
 @dataclass
 class DecayResult:
@@ -119,7 +125,7 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
             continue
 
         if _meets_promotion_criteria(node, decayed_weight, now):
-            new_tier, new_precision = (2, 8) if node.tier == 1 else (3, 2)
+            new_tier, new_precision = _PROMOTION_TARGET[node.tier]
             _promote_node(
                 graph, node, new_tier=new_tier, new_precision=new_precision, now=now
             )
