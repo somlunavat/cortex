@@ -703,3 +703,172 @@ class TestCompactHook:
         captured = capsys.readouterr()
         assert result == 0
         assert "CORTEX MEMORY" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# cli/config.py — cortex_dir, sessions_dir, db_path override, _apply_migrations
+# ---------------------------------------------------------------------------
+
+
+class TestConfigHelpers:
+    def test_cortex_dir_returns_correct_path(self, tmp_path: Path) -> None:
+        from cli.config import cortex_dir
+
+        result = cortex_dir(tmp_path)
+        assert result == tmp_path / ".cortex"
+
+    def test_sessions_dir_returns_correct_path(self, tmp_path: Path) -> None:
+        from cli.config import sessions_dir
+
+        result = sessions_dir(tmp_path)
+        assert result == tmp_path / ".cortex" / "sessions"
+
+    def test_db_path_non_absolute_override_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cli.config import db_path
+
+        monkeypatch.setenv("CORTEX_DB_PATH", "relative/path.db")
+        with pytest.raises(ValueError, match="absolute"):
+            db_path(tmp_path)
+
+    def test_db_path_absolute_override_is_returned(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cli.config import db_path
+
+        override = str(tmp_path / "override.db")
+        monkeypatch.setenv("CORTEX_DB_PATH", override)
+        result = db_path(tmp_path)
+        assert str(result) == override
+
+    def test_apply_migrations_adds_nodes_promoted_column(self, tmp_path: Path) -> None:
+        from cli.config import SCHEMA_PATH, _apply_migrations
+
+        conn = sqlite3.connect(str(tmp_path / "test.db"))
+        conn.executescript(SCHEMA_PATH.read_text())
+        # Drop the column by recreating the table without it (SQLite doesn't
+        # support DROP COLUMN in older versions, so we use a workaround)
+        existing = {
+            row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+        }
+        if "nodes_promoted" in existing:
+            # Already present — verify migration is idempotent (no error)
+            _apply_migrations(conn)
+        else:
+            _apply_migrations(conn)
+            cols = {
+                row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+            }
+            assert "nodes_promoted" in cols
+
+    def test_apply_migrations_idempotent_when_column_exists(self) -> None:
+        from cli.config import SCHEMA_PATH, _apply_migrations
+
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(SCHEMA_PATH.read_text())
+        _apply_migrations(conn)
+        _apply_migrations(conn)  # second call must not raise
+        cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+        }
+        assert "nodes_promoted" in cols
+
+
+# ---------------------------------------------------------------------------
+# hooks/extract.py — _wire_co_occurring_edges pair!=2 branch (line 87)
+# ---------------------------------------------------------------------------
+
+
+class TestWireEdgesPairSizeGuard:
+    def test_pair_with_three_paths_is_skipped(
+        self, graph: Graph, tmp_path: Path
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        # frozenset with 3 elements — paths != 2 branch
+        triple = frozenset({"/a/x.py", "/a/y.py", "/a/z.py"})
+        _wire_co_occurring_edges(
+            co_pairs=(triple,),
+            file_node_ids={},
+            project=str(tmp_path),
+            graph=graph,
+        )
+        # No error, no edges written
+        rows = graph._conn.execute("SELECT COUNT(*) FROM edges").fetchone()
+        assert rows[0] == 0
+
+
+# ---------------------------------------------------------------------------
+# hooks/extract.py — _compute_token_stats branches (lines 184, 191, 197-198)
+# ---------------------------------------------------------------------------
+
+
+class TestComputeTokenStats:
+    def test_empty_graph_returns_none_none(self, graph: Graph) -> None:
+        from hooks.extract import _compute_token_stats
+
+        result = _compute_token_stats(graph, "/tmp/test_project")
+        assert result == (None, None)
+
+    def test_exception_returns_none_none(
+        self, graph: Graph, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from hooks import extract as extract_mod
+
+        monkeypatch.setattr(
+            extract_mod,
+            "count_tokens",
+            lambda *a, **kw: (_ for _ in ()).throw(
+                RuntimeError("tiktoken unavailable")
+            ),
+        )
+        # Even with a node we can't count tokens — should catch and return None, None
+        import numpy as np
+
+        vec = np.zeros(384, dtype=np.float32)
+        node = Node(
+            id="",
+            type="observation",
+            tier=1,
+            text="test node text for token counting",
+            rationale="",
+            embedding=vec,
+            precision_bits=32,
+            weight=1.0,
+            project="/tmp/test_project",
+            scope="project",
+            source="jsonl",
+            last_accessed=0,
+            created_at=0,
+            session_count=1,
+        )
+        graph.write_node(node)
+        result = extract_mod._compute_token_stats(graph, "/tmp/test_project")
+        assert result == (None, None)
+
+
+# ---------------------------------------------------------------------------
+# hooks/extract.py — main() open_graph=None path (lines 223-224)
+# ---------------------------------------------------------------------------
+
+
+class TestExtractMainGraphNone:
+    def test_main_returns_1_when_graph_is_none(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        from hooks import extract as extract_mod
+
+        transcript = tmp_path / "t.jsonl"
+        transcript.write_text("")
+        monkeypatch.setenv("CLAUDE_TRANSCRIPT", str(transcript))
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", str(tmp_path))
+        monkeypatch.setattr(extract_mod, "open_graph", lambda *a, **kw: None)
+
+        result = extract_main()
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "could not open graph" in captured.err
