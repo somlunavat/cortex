@@ -39,6 +39,16 @@ app = typer.Typer(
 )
 console = Console()
 
+# ---------------------------------------------------------------------------
+# Shared node-field enumerations — used by import_ and list for validation
+# ---------------------------------------------------------------------------
+
+_VALID_NODE_TYPES: frozenset[str] = frozenset(
+    {"observation", "fact", "convention", "error"}
+)
+_VALID_SOURCES: frozenset[str] = frozenset({"jsonl", "ast", "git", "nlp"})
+_VALID_SCOPES: frozenset[str] = frozenset({"project", "module", "session"})
+
 
 def _resolve_root(project_path: str) -> Path:
     """Return Path(project_path) when given, otherwise CWD."""
@@ -590,15 +600,15 @@ def import_(
             tier = 1
 
         node_type = str(rec.get("type", "observation"))
-        if node_type not in ("observation", "fact", "convention", "error"):
+        if node_type not in _VALID_NODE_TYPES:
             node_type = "observation"
 
         scope = str(rec.get("scope", "project"))
-        if scope not in ("project", "module", "session"):
+        if scope not in _VALID_SCOPES:
             scope = "project"
 
         source = str(rec.get("source", "jsonl"))
-        if source not in ("jsonl", "ast", "git", "nlp"):
+        if source not in _VALID_SOURCES:
             source = "jsonl"
 
         embedding = embed(text)
@@ -818,18 +828,16 @@ def list_nodes(
 ) -> None:
     """List memory nodes in a paginated table with optional filters."""
     g, project = _require_graph(project_path)
-    valid_types = {"observation", "fact", "convention", "error"}
-    valid_sources = {"jsonl", "ast", "git", "nlp"}
     valid_sorts = {"weight", "created", "accessed"}
 
-    if node_type and node_type not in valid_types:
+    if node_type and node_type not in _VALID_NODE_TYPES:
         console.print(
-            f"[red]Invalid type '{node_type}'. Choose from: {', '.join(sorted(valid_types))}[/red]"
+            f"[red]Invalid type '{node_type}'. Choose from: {', '.join(sorted(_VALID_NODE_TYPES))}[/red]"
         )
         raise typer.Exit(1)
-    if source and source not in valid_sources:
+    if source and source not in _VALID_SOURCES:
         console.print(
-            f"[red]Invalid source '{source}'. Choose from: {', '.join(sorted(valid_sources))}[/red]"
+            f"[red]Invalid source '{source}'. Choose from: {', '.join(sorted(_VALID_SOURCES))}[/red]"
         )
         raise typer.Exit(1)
     if sort not in valid_sorts:
