@@ -822,6 +822,9 @@ def list_nodes(
         "weight", "--sort", help="Sort by: weight, created, accessed"
     ),
     limit: int = typer.Option(25, "--limit", "-n", help="Maximum nodes to show"),
+    output_json: bool = typer.Option(
+        False, "--json", help="Output nodes as JSON instead of a table"
+    ),
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"
     ),
@@ -862,8 +865,32 @@ def list_nodes(
     )
 
     if not nodes_page:
-        console.print("[dim]No nodes found.[/dim]")
+        if output_json:
+            print("[]")
+        else:
+            console.print("[dim]No nodes found.[/dim]")
         raise typer.Exit(0)
+
+    if output_json:
+        records = [
+            {
+                "id": node.id,
+                "type": node.type,
+                "tier": node.tier,
+                "text": node.text,
+                "rationale": node.rationale,
+                "weight": node.weight,
+                "session_count": node.session_count,
+                "source": node.source,
+                "scope": node.scope,
+                "project": node.project,
+                "last_accessed": node.last_accessed,
+                "created_at": node.created_at,
+            }
+            for node in nodes_page
+        ]
+        print(json.dumps(records, indent=2))
+        return
 
     title = f"Nodes — {project}"
     if any([tier, node_type, source]):
