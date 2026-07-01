@@ -1826,3 +1826,192 @@ class TestCountCommand:
             env={"CORTEX_DB_PATH": str(tmp_path / "none.db")},
         )
         assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# cortex import_ — open_graph returns None (lines 549-551)
+# ---------------------------------------------------------------------------
+
+
+class TestImportOpenGraphNone:
+    def test_import_exits_1_when_graph_cannot_open(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import cli.cortex as cortex_mod
+
+        f = tmp_path / "nodes.json"
+        f.write_text("[]")
+        monkeypatch.setattr(cortex_mod, "open_graph", lambda *a, **kw: None)
+        result = runner.invoke(
+            app,
+            ["import-", str(f), "--project", str(tmp_path)],
+            env={"CORTEX_DB_PATH": str(tmp_path / "c.db")},
+        )
+        assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# cortex annotate — update_node_rationale returns False (lines 711-713)
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotateUpdateFails:
+    def test_annotate_exits_1_when_update_returns_false(
+        self, tmp_db: Path, project: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from core import graph as graph_mod
+
+        node_id = _seed_node(tmp_db, project)
+        monkeypatch.setattr(
+            graph_mod.Graph, "update_node_rationale", lambda *a, **kw: False
+        )
+        result = runner.invoke(
+            app,
+            ["annotate", node_id, "--rationale", "test rationale"],
+            env={"CORTEX_DB_PATH": str(tmp_db), "CLAUDE_PROJECT_PATH": project},
+        )
+        assert result.exit_code != 0
+        assert "failed" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# cortex doctor — package-specific unhealthy paths (lines 969-970, 980-981, 989-990)
+# and all-ok path (line 1026)
+# ---------------------------------------------------------------------------
+
+
+class TestDoctorPackageChecks:
+    def test_doctor_spacy_unhealthy(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import builtins
+
+        real_import = builtins.__import__
+
+        def break_spacy(name: str, *args: object, **kwargs: object) -> object:
+            if name == "spacy":
+                raise ImportError("no spacy")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", break_spacy)
+        result = runner.invoke(
+            app,
+            ["doctor", "--project", str(tmp_path)],
+            env={"CORTEX_DB_PATH": str(tmp_path / "c.db")},
+        )
+        assert result.exit_code == 0
+        assert "spaCy" in result.output
+
+    def test_doctor_sentence_transformers_unhealthy(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import builtins
+
+        real_import = builtins.__import__
+
+        def break_st(name: str, *args: object, **kwargs: object) -> object:
+            if name == "sentence_transformers":
+                raise ImportError("no sentence_transformers")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", break_st)
+        result = runner.invoke(
+            app,
+            ["doctor", "--project", str(tmp_path)],
+            env={"CORTEX_DB_PATH": str(tmp_path / "c.db")},
+        )
+        assert result.exit_code == 0
+        assert "sentence-transformers" in result.output
+
+    def test_doctor_tiktoken_unhealthy(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import builtins
+
+        real_import = builtins.__import__
+
+        def break_tiktoken(name: str, *args: object, **kwargs: object) -> object:
+            if name == "tiktoken":
+                raise ImportError("no tiktoken")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", break_tiktoken)
+        result = runner.invoke(
+            app,
+            ["doctor", "--project", str(tmp_path)],
+            env={"CORTEX_DB_PATH": str(tmp_path / "c.db")},
+        )
+        assert result.exit_code == 0
+        assert "tiktoken" in result.output
+
+    def test_doctor_all_ok_prints_success(
+        self, tmp_db: Path, project: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Create a fake plugin manifest so every check passes
+        fake_home = Path(tmp_db).parent
+        (fake_home / ".claude" / "plugins").mkdir(parents=True, exist_ok=True)
+        (fake_home / ".claude" / "plugins" / "cortex.json").write_text("{}")
+
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+        result = runner.invoke(
+            app,
+            ["doctor", "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        assert "All checks passed" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cortex dashboard — uvicorn present but dashboard module missing (lines 1061-1064)
+# ---------------------------------------------------------------------------
+
+
+class TestDashboardModuleMissing:
+    def test_dashboard_exits_1_when_server_module_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import cli.cortex as cortex_mod
+
+        monkeypatch.setattr(cortex_mod.Path, "exists", lambda self: False)
+        result = runner.invoke(app, ["dashboard"])
+        assert result.exit_code != 0
+
+    def test_dashboard_starts_when_module_exists(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import types
+
+        import cli.cortex as cortex_mod
+
+        fake_uvicorn = types.SimpleNamespace(run=lambda *a, **kw: None)
+        dashboard_dir = Path(cortex_mod.__file__).parent.parent / "dashboard"
+        dashboard_dir.mkdir(exist_ok=True)
+        server_file = dashboard_dir / "server.py"
+        created = not server_file.exists()
+        if created:
+            server_file.write_text("# placeholder")
+        try:
+            monkeypatch.setitem(__import__("sys").modules, "uvicorn", fake_uvicorn)
+            result = runner.invoke(app, ["dashboard"])
+        finally:
+            if created:
+                server_file.unlink(missing_ok=True)
+        assert result.exit_code == 0
+        assert "localhost:7000" in result.output
+
+
+# ---------------------------------------------------------------------------
+# cli/cortex.py __main__ block (line 1076)
+# ---------------------------------------------------------------------------
+
+
+class TestCortexMainBlock:
+    def test_main_block_invokes_app(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import runpy
+        import sys
+
+        monkeypatch.setattr(sys, "argv", ["cortex", "--help"])
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_module("cli.cortex", run_name="__main__", alter_sys=False)
+        assert exc_info.value.code == 0
