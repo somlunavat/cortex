@@ -345,6 +345,64 @@ def search(
 
 
 @app.command()
+def similar(
+    node_id: str = typer.Argument(..., help="Node UUID to find similar nodes for"),
+    limit: int = typer.Option(5, "--limit", "-n", help="Maximum results to return"),
+    threshold: float = typer.Option(
+        0.5, "--threshold", help="Minimum cosine similarity (0.0-1.0)"
+    ),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+) -> None:
+    """Find the most embedding-similar nodes to a given node."""
+    if not (0.0 <= threshold <= 1.0):
+        console.print("[red]--threshold must be between 0.0 and 1.0.[/red]")
+        raise typer.Exit(1)
+
+    g, project = _require_graph(project_path, exit_code=1)
+    target = g.get_node(node_id)
+    if target is None:
+        console.print(f"[red]Node not found:[/red] {node_id}")
+        raise typer.Exit(1)
+    if target.embedding is None:
+        console.print(f"[red]Node has no embedding:[/red] {node_id[:8]}…")
+        raise typer.Exit(1)
+
+    results = g.find_similar(
+        embedding=target.embedding,
+        project=project,
+        threshold=threshold,
+        limit=limit + 1,
+    )
+    results = [n for n in results if n.id != node_id][:limit]
+
+    if not results:
+        console.print("[dim]No similar nodes found above threshold.[/dim]")
+        raise typer.Exit(0)
+
+    table = Table(title=f"Similar to {node_id[:8]}…")
+    table.add_column("T", style="cyan", justify="center", width=3)
+    table.add_column("Type", style="dim", width=12)
+    table.add_column("Src", style="dim", width=5)
+    table.add_column("Weight", justify="right", width=7)
+    table.add_column("Text")
+    table.add_column("ID", style="dim", width=10)
+
+    for node in results:
+        table.add_row(
+            str(node.tier),
+            node.type,
+            node.source,
+            f"{node.weight:.2f}",
+            node.text[:72],
+            node.id[:8] + "…",
+        )
+
+    console.print(table)
+
+
+@app.command()
 def decay(
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"
