@@ -814,3 +814,36 @@ class TestGitChannelEdgeCases:
         result = git_channel(tmp_path, session_start=0)
         assert isinstance(result, list)
         monkeypatch.setattr(repo.__class__, "iter_commits", original_iter)
+
+
+# ---------------------------------------------------------------------------
+# _process_sentence — line 575 (empty text → None) and line 512 (never branch)
+# _score_durability — "never" keyword boost (line 512)
+# ---------------------------------------------------------------------------
+
+
+class FakeSent:
+    """Minimal spaCy-sentence-like stub for unit testing helpers."""
+
+    def __init__(self, text: str, ents: list | None = None) -> None:
+        self.text = text
+        self.ents = ents or []
+
+    def __iter__(self):  # type: ignore[override]
+        yield from []
+
+
+class TestProcessSentenceExtra:
+    def test_empty_text_returns_none(self) -> None:
+        from core.extractor import _process_sentence
+
+        result = _process_sentence(FakeSent("   "), project="/tmp/test")
+        assert result is None
+
+    def test_score_durability_never_keyword_adds_bonus(self) -> None:
+        from core.extractor import NodeType, _score_durability
+
+        sent = FakeSent("we never commit secrets to the repository")
+        score = _score_durability(sent, NodeType.CONVENTION)
+        # baseline 0.5 + convention 0.3 + never 0.2 = 1.0
+        assert score >= 1.0

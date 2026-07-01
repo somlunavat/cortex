@@ -369,3 +369,45 @@ class TestEmbedFallbacks:
         monkeypatch.setattr(emb_mod, "_model_loaded", True)
         result = emb_mod.embed("test")
         assert result.shape == (384,)
+
+
+class TestEmbedSqueeze:
+    """Lines 69 and 99: squeeze when real model returns unexpected ndim > 1."""
+
+    def test_embed_batch_squeezes_3d_output(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import core.embedder as emb_mod
+
+        real_model = emb_mod._get_model()
+        if real_model is None:
+            pytest.skip("model not available")
+
+        original_encode = real_model.encode
+
+        def fake_encode_batch(texts: list[str], **kw: object) -> np.ndarray:
+            return np.ones((len(texts), 1, 384), dtype=np.float32)
+
+        monkeypatch.setattr(real_model, "encode", fake_encode_batch)
+        results = emb_mod.embed_batch(["hello world"])
+        assert results[0].shape == (384,)
+        monkeypatch.setattr(real_model, "encode", original_encode)
+
+    def test_embed_squeezes_2d_output_with_real_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import core.embedder as emb_mod
+
+        real_model = emb_mod._get_model()
+        if real_model is None:
+            pytest.skip("model not available")
+
+        original_encode = real_model.encode
+
+        def fake_encode_single(text: str, **kw: object) -> np.ndarray:
+            return np.ones((1, 384), dtype=np.float32)
+
+        monkeypatch.setattr(real_model, "encode", fake_encode_single)
+        result = emb_mod.embed("hello world")
+        assert result.shape == (384,)
+        monkeypatch.setattr(real_model, "encode", original_encode)
