@@ -33,6 +33,17 @@ TIER2_PROMOTION_AGE_DAYS: int = 14
 
 SECONDS_PER_DAY: int = 86_400
 
+# Per-tier lookup tables — avoids repeated if/else in hot loops
+_DECAY_RATE: dict[int, float] = {
+    1: TIER1_DECAY_RATE,
+    2: TIER2_DECAY_RATE,
+}
+
+_EVICTION_THRESHOLD_MAP: dict[int, float] = {
+    1: TIER1_EVICTION_THRESHOLD,
+    2: TIER2_EVICTION_THRESHOLD,
+}
+
 # Promotion targets: {from_tier: (to_tier, precision_bits)}
 _PROMOTION_TARGET: dict[int, tuple[int, int]] = {
     1: (2, 8),
@@ -51,13 +62,11 @@ class DecayResult:
 
 
 def _decay_rate(tier: int) -> float:
-    """Return the per-session weight multiplier for a node tier."""
-    return TIER1_DECAY_RATE if tier == 1 else TIER2_DECAY_RATE
+    return _DECAY_RATE[tier]
 
 
 def _eviction_threshold(tier: int) -> float:
-    """Return the weight floor below which a tier-1 or tier-2 node is evicted."""
-    return TIER1_EVICTION_THRESHOLD if tier == 1 else TIER2_EVICTION_THRESHOLD
+    return _EVICTION_THRESHOLD_MAP[tier]
 
 
 def _meets_promotion_criteria(node: Node, decayed_weight: float, now: int) -> bool:
