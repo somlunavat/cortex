@@ -1008,6 +1008,41 @@ class TestRecentCommand:
         result = self._invoke_recent(tmp_db, project, ["--limit", "3"])
         assert result.exit_code == 0
 
+    def test_json_flag_empty_db_returns_empty_list(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        result = self._invoke_recent(tmp_db, project, ["--json"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed == []
+
+    def test_json_flag_outputs_valid_json(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="some recent node")
+        result = self._invoke_recent(tmp_db, project, ["--json"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert isinstance(parsed, list)
+        assert len(parsed) == 1
+
+    def test_json_flag_includes_required_fields(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        _seed_node(tmp_db, project, text="field check node")
+        result = self._invoke_recent(tmp_db, project, ["--json"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        rec = parsed[0]
+        for field in ("id", "type", "tier", "text", "weight", "last_accessed"):
+            assert field in rec, f"missing field: {field}"
+
+    def test_json_flag_limit_respected(self, tmp_db: Path, project: str) -> None:
+        for i in range(5):
+            _seed_node(tmp_db, project, text=f"node {i}")
+        result = self._invoke_recent(tmp_db, project, ["--json", "--limit", "2"])
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert len(parsed) <= 2
+
 
 # ---------------------------------------------------------------------------
 # cortex export
