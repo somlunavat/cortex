@@ -963,3 +963,48 @@ class TestAstChannelGaps:
         result = _compute_file_churn(repo, lookback=10, threshold=0.0)
         assert isinstance(result, dict)
         monkeypatch.setattr(commits[0].__class__, "diff", original_diff)
+
+
+# ---------------------------------------------------------------------------
+# Additional jsonl_channel edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestJsonlChannelEdgeCases:
+    def test_write_event_missing_path_key_ignored(self) -> None:
+        event = _make_event(EventType.FILE_WRITE, data={})
+        candidates = jsonl_channel([event], TEST_PROJECT)
+        assert candidates == []
+
+    def test_write_event_empty_path_ignored(self) -> None:
+        event = _make_event(EventType.FILE_WRITE, data={"path": ""})
+        candidates = jsonl_channel([event], TEST_PROJECT)
+        assert candidates == []
+
+    def test_exactly_three_writes_triggers_hotspot(self) -> None:
+        events = [_write_event(f"{TEST_PROJECT}/main.py", ts) for ts in range(3)]
+        candidates = jsonl_channel(events, TEST_PROJECT)
+        obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
+        assert len(obs) == 1
+
+    def test_multiple_hotspot_files_each_produce_node(self) -> None:
+        events = [_write_event(f"{TEST_PROJECT}/a.py", ts) for ts in range(3)]
+        events += [_write_event(f"{TEST_PROJECT}/b.py", ts) for ts in range(3)]
+        candidates = jsonl_channel(events, TEST_PROJECT)
+        obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
+        assert len(obs) == 2
+
+    def test_bash_failure_event_always_produces_error_node(self) -> None:
+        event = _make_event(
+            EventType.BASH_FAILURE,
+            data={"command": "echo hi", "exit_code": 0, "output": ""},
+        )
+        candidates = jsonl_channel([event], TEST_PROJECT)
+        errors = [c for c in candidates if c.type == NodeType.ERROR]
+        assert len(errors) == 1
+
+    def test_non_project_path_still_produces_hotspot(self) -> None:
+        events = [_write_event("/other/project/file.py", ts) for ts in range(3)]
+        candidates = jsonl_channel(events, TEST_PROJECT)
+        obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
+        assert len(obs) == 1
