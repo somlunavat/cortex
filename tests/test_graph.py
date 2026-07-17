@@ -394,6 +394,130 @@ class TestDeleteNode:
 
 
 # ---------------------------------------------------------------------------
+# delete_all_nodes
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteAllNodes:
+    def test_returns_count_of_deleted(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(3):
+            graph.write_node(_make_node(dummy_embedding, text=f"n{i}"))
+        count = graph.delete_all_nodes(TEST_PROJECT)
+        assert count == 3
+
+    def test_clears_all_nodes_for_project(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="a"))
+        graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.delete_all_nodes(TEST_PROJECT)
+        assert graph.get_all_nodes(TEST_PROJECT) == []
+
+    def test_empty_project_returns_zero(self, graph: Graph) -> None:
+        count = graph.delete_all_nodes(TEST_PROJECT)
+        assert count == 0
+
+    def test_does_not_delete_other_project_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        import uuid
+
+        other_project = "/other/proj"
+        graph.write_node(_make_node(dummy_embedding, text="mine"))
+        other_node = _make_node(dummy_embedding, text="other")
+        other_node = Node(
+            id=str(uuid.uuid4()),
+            type=other_node.type,
+            tier=other_node.tier,
+            text=other_node.text,
+            rationale=other_node.rationale,
+            embedding=other_node.embedding,
+            precision_bits=other_node.precision_bits,
+            weight=other_node.weight,
+            project=other_project,
+            scope=other_node.scope,
+            source=other_node.source,
+            last_accessed=other_node.last_accessed,
+            created_at=other_node.created_at,
+            session_count=other_node.session_count,
+        )
+        graph.write_node(other_node)
+        graph.delete_all_nodes(TEST_PROJECT)
+        remaining = graph.get_all_nodes(other_project)
+        assert len(remaining) == 1
+
+
+# ---------------------------------------------------------------------------
+# update_node_tier
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateNodeTier:
+    def test_tier_is_updated(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        import time
+
+        node_id = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(
+            node_id,
+            new_tier=2,
+            new_precision=8,
+            embedding_blob=None,
+            now=int(time.time()),
+        )
+        node = graph.get_node(node_id)
+        assert node is not None
+        assert node.tier == 2
+
+    def test_precision_bits_updated(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        import time
+
+        node_id = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(
+            node_id,
+            new_tier=2,
+            new_precision=8,
+            embedding_blob=None,
+            now=int(time.time()),
+        )
+        node = graph.get_node(node_id)
+        assert node is not None
+        assert node.precision_bits == 8
+
+    def test_last_accessed_updated(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        import time
+
+        now = int(time.time()) + 9999
+        node_id = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(
+            node_id,
+            new_tier=2,
+            new_precision=8,
+            embedding_blob=None,
+            now=now,
+        )
+        node = graph.get_node(node_id)
+        assert node is not None
+        assert node.last_accessed == now
+
+    def test_nonexistent_node_is_silent(self, graph: Graph) -> None:
+        import time
+
+        graph.update_node_tier(
+            "nonexistent-uuid",
+            new_tier=2,
+            new_precision=8,
+            embedding_blob=None,
+            now=int(time.time()),
+        )
+
+
+# ---------------------------------------------------------------------------
 # write_edge / get_edges
 # ---------------------------------------------------------------------------
 
