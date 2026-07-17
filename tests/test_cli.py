@@ -235,6 +235,53 @@ class TestStatsCommand:
         assert result.exit_code == 0
         assert "0" in result.output
 
+    def test_json_flag_returns_valid_json(self, tmp_db: Path, project: str) -> None:
+        _seed_session(tmp_db, project, tokens_raw=500, tokens_injected=200)
+        _seed_node(tmp_db, project, text="some node", tier=1)
+        result = runner.invoke(
+            app,
+            ["stats", "--project", project, "--json"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, dict)
+
+    def test_json_flag_includes_required_fields(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        _seed_session(tmp_db, project)
+        result = runner.invoke(
+            app,
+            ["stats", "--project", project, "--json"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        data = json.loads(result.output)
+        for field in (
+            "session_count",
+            "nodes_total",
+            "tier_counts",
+            "total_written",
+            "total_evicted",
+            "total_promoted",
+            "total_saved",
+        ):
+            assert field in data, f"missing: {field}"
+
+    def test_json_flag_tier_counts_correct(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="t1 node", tier=1)
+        _seed_node(tmp_db, project, text="t2 node", tier=2)
+        result = runner.invoke(
+            app,
+            ["stats", "--project", project, "--json"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        data = json.loads(result.output)
+        assert data["tier_counts"]["tier1"] == 1
+        assert data["tier_counts"]["tier2"] == 1
+        assert data["tier_counts"]["tier3"] == 0
+        assert data["nodes_total"] == 2
+
 
 # ---------------------------------------------------------------------------
 # cortex import_
@@ -1937,6 +1984,35 @@ class TestCountCommand:
             env={"CORTEX_DB_PATH": str(tmp_path / "none.db")},
         )
         assert result.exit_code == 0
+
+    def test_count_json_flag_all_tiers(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="tier1 node", tier=1)
+        _seed_node(tmp_db, project, text="tier2 node", tier=2)
+        result = runner.invoke(
+            app,
+            ["count", "--project", project, "--json"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["total"] == 2
+        assert data["tier1"] == 1
+        assert data["tier2"] == 1
+        assert data["tier3"] == 0
+
+    def test_count_json_flag_specific_tier(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="tier3 node a", tier=3)
+        _seed_node(tmp_db, project, text="tier3 node b", tier=3)
+        _seed_node(tmp_db, project, text="tier1 node", tier=1)
+        result = runner.invoke(
+            app,
+            ["count", "--tier", "3", "--project", project, "--json"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["tier"] == 3
+        assert data["total"] == 2
 
 
 # ---------------------------------------------------------------------------
