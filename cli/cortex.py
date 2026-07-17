@@ -525,10 +525,15 @@ def export(
     ),
     tier: int = typer.Option(0, "--tier", "-t", help="Filter by tier (0 = all tiers)"),
     fmt: str = typer.Option(
-        "json", "--format", "-f", help="Output format: json or csv"
+        "json", "--format", "-f", help="Output format: json, csv, or yaml"
     ),
 ) -> None:
-    """Export memory nodes to JSON or CSV for backup or inspection."""
+    """Export memory nodes to JSON, CSV, or YAML for backup or inspection."""
+    if fmt not in ("json", "csv", "yaml"):
+        console.print(
+            f"[red]Invalid format '{fmt}'. Choose from: json, csv, yaml[/red]"
+        )
+        raise typer.Exit(1)
     g, project = _require_graph(project_path)
     nodes = g.get_all_nodes(project=project, tier=tier if tier else None)
 
@@ -536,7 +541,31 @@ def export(
         console.print("[dim]No nodes to export.[/dim]")
         raise typer.Exit(0)
 
-    if fmt == "csv":
+    if fmt == "yaml":
+        try:
+            import yaml
+        except ImportError as exc:
+            console.print("[red]PyYAML is not installed. Run: pip install pyyaml[/red]")
+            raise typer.Exit(1) from exc
+        rows = [
+            {
+                "id": node.id,
+                "type": node.type,
+                "tier": node.tier,
+                "text": node.text,
+                "rationale": node.rationale,
+                "weight": node.weight,
+                "session_count": node.session_count,
+                "scope": node.scope,
+                "source": node.source,
+                "project": node.project,
+                "last_accessed": node.last_accessed,
+                "created_at": node.created_at,
+            }
+            for node in nodes
+        ]
+        content = yaml.dump(rows, allow_unicode=True, sort_keys=False)
+    elif fmt == "csv":
         import csv
         import io
 

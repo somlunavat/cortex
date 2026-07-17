@@ -1232,6 +1232,48 @@ class TestExportCommand:
         )
         assert result.exit_code != 0
 
+    def test_invalid_format_exits_nonzero(self, tmp_db: Path, project: str) -> None:
+        _seed_node(tmp_db, project, text="format test node", tier=1)
+        result = self._invoke_export(tmp_db, project, ["--format", "xml"])
+        assert result.exit_code != 0
+        assert "Invalid format" in result.output
+
+    def test_yaml_format_to_stdout(self, tmp_db: Path, project: str) -> None:
+        import yaml
+
+        _seed_node(tmp_db, project, text="yaml export node", tier=2)
+        result = self._invoke_export(tmp_db, project, ["--format", "yaml"])
+        assert result.exit_code == 0
+        data = yaml.safe_load(result.output)
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["text"] == "yaml export node"
+
+    def test_yaml_format_to_file(
+        self, tmp_db: Path, project: str, tmp_path: Path
+    ) -> None:
+        import yaml
+
+        _seed_node(tmp_db, project, text="yaml file node", tier=1)
+        out_file = tmp_path / "out.yaml"
+        result = self._invoke_export(
+            tmp_db, project, ["--format", "yaml", "--out", str(out_file)]
+        )
+        assert result.exit_code == 0
+        assert out_file.exists()
+        data = yaml.safe_load(out_file.read_text())
+        assert data[0]["text"] == "yaml file node"
+
+    def test_yaml_includes_required_fields(self, tmp_db: Path, project: str) -> None:
+        import yaml
+
+        _seed_node(tmp_db, project, text="yaml fields test", tier=1)
+        result = self._invoke_export(tmp_db, project, ["--format", "yaml"])
+        data = yaml.safe_load(result.output)
+        first = data[0]
+        for field in ("id", "type", "tier", "text", "weight", "source"):
+            assert field in first, f"missing: {field}"
+
 
 # ---------------------------------------------------------------------------
 # cortex decay
