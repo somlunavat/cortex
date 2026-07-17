@@ -179,6 +179,46 @@ class TestSessionsCommand:
         assert oldest_prefix in output
         assert output.find(recent_prefix) < output.find(oldest_prefix)
 
+    def test_json_flag_returns_array(self, tmp_db: Path, project: str) -> None:
+        _seed_session(tmp_db, project, tokens_raw=600, tokens_injected=200)
+        result = self._invoke_sessions(tmp_db, project, ["--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+        assert len(data) == 1
+
+    def test_json_flag_includes_required_fields(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        _seed_session(tmp_db, project, tokens_raw=900, tokens_injected=300)
+        result = self._invoke_sessions(tmp_db, project, ["--json"])
+        data = json.loads(result.output)
+        first = data[0]
+        for field in (
+            "id",
+            "ended_at",
+            "nodes_written",
+            "nodes_evicted",
+            "nodes_promoted",
+            "tokens_raw",
+            "tokens_injected",
+            "tokens_saved",
+        ):
+            assert field in first, f"missing: {field}"
+
+    def test_json_flag_tokens_saved_computed(self, tmp_db: Path, project: str) -> None:
+        _seed_session(tmp_db, project, tokens_raw=1000, tokens_injected=400)
+        result = self._invoke_sessions(tmp_db, project, ["--json"])
+        data = json.loads(result.output)
+        assert data[0]["tokens_saved"] == 600
+
+    def test_json_flag_no_sessions_returns_empty_array(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        result = self._invoke_sessions(tmp_db, project, ["--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+
 
 # ---------------------------------------------------------------------------
 # cortex stats
