@@ -17,6 +17,7 @@ import numpy as np
 from core.embedder import cosine_similarity, deserialize, serialize
 
 TOUCH_WEIGHT_BUMP: float = 0.1
+MERGE_WEIGHT_BUMP: float = 0.5
 
 _NODE_COLUMNS = (
     "id, type, tier, text, rationale, embedding, precision_bits, "
@@ -184,7 +185,7 @@ class Graph:
         """Update an existing node without creating a duplicate.
 
         Merging rules (from extraction-pipeline.md):
-        - weight += 0.5
+        - weight += MERGE_WEIGHT_BUMP
         - last_accessed = now()
         - session_count += 1
         - text: keep existing unless candidate text is strictly shorter
@@ -224,29 +225,29 @@ class Graph:
 
         if new_embedding_blob is not None:
             self._conn.execute(
-                """
+                f"""
                 UPDATE nodes
-                SET weight = weight + 0.5,
+                SET weight = weight + {MERGE_WEIGHT_BUMP},
                     last_accessed = ?,
                     session_count = session_count + 1,
                     text = ?,
                     rationale = ?,
                     embedding = ?
                 WHERE id = ?
-                """,
+                """,  # nosec B608
                 (now, new_text, new_rationale, new_embedding_blob, existing_id),
             )
         else:
             self._conn.execute(
-                """
+                f"""
                 UPDATE nodes
-                SET weight = weight + 0.5,
+                SET weight = weight + {MERGE_WEIGHT_BUMP},
                     last_accessed = ?,
                     session_count = session_count + 1,
                     text = ?,
                     rationale = ?
                 WHERE id = ?
-                """,
+                """,  # nosec B608
                 (now, new_text, new_rationale, existing_id),
             )
         self._conn.commit()
