@@ -311,9 +311,7 @@ class TestApiSessions:
 
 
 class TestDashboardUi:
-    def test_serves_html(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_serves_html(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from dashboard import server as srv
 
         monkeypatch.setenv("CLAUDE_PROJECT_PATH", str(tmp_path))
