@@ -336,6 +336,9 @@ def reset(
     )
 
 
+_SEARCH_QUERY_MAX_LEN: int = 512
+
+
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Text to search for in memory nodes"),
@@ -350,6 +353,11 @@ def search(
     output_json: bool = typer.Option(False, "--json", help="Output results as JSON"),
 ) -> None:
     """Search memory nodes by text using BM25 ranking."""
+    if len(query) > _SEARCH_QUERY_MAX_LEN:
+        console.print(
+            f"[red]Query too long:[/red] {len(query)} chars (max {_SEARCH_QUERY_MAX_LEN})"
+        )
+        raise typer.Exit(1)
     g, project = _require_graph("")
     valid_sources = {"jsonl", "ast", "git", "nlp"}
     if source and source not in valid_sources:
