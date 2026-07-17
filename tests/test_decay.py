@@ -510,3 +510,57 @@ def test_meets_promotion_criteria_tier3_always_false(
 ) -> None:
     node = _make_node(dummy_embedding, tier=3, weight=100.0, session_count=100)
     assert _meets_promotion_criteria(node, 100.0, int(time.time())) is False
+
+
+# ---------------------------------------------------------------------------
+# _decay_rate and _eviction_threshold helpers
+# ---------------------------------------------------------------------------
+
+
+def test_decay_rate_tier1_matches_constant(dummy_embedding: np.ndarray) -> None:
+    from core.decay import TIER1_DECAY_RATE, _decay_rate
+
+    assert _decay_rate(1) == TIER1_DECAY_RATE
+
+
+def test_decay_rate_tier2_matches_constant(dummy_embedding: np.ndarray) -> None:
+    from core.decay import TIER2_DECAY_RATE, _decay_rate
+
+    assert _decay_rate(2) == TIER2_DECAY_RATE
+
+
+def test_eviction_threshold_tier1_matches_constant(dummy_embedding: np.ndarray) -> None:
+    from core.decay import TIER1_EVICTION_THRESHOLD, _eviction_threshold
+
+    assert _eviction_threshold(1) == TIER1_EVICTION_THRESHOLD
+
+
+def test_eviction_threshold_tier2_matches_constant(dummy_embedding: np.ndarray) -> None:
+    from core.decay import TIER2_EVICTION_THRESHOLD, _eviction_threshold
+
+    assert _eviction_threshold(2) == TIER2_EVICTION_THRESHOLD
+
+
+def test_run_decay_empty_project_returns_zero_counts(
+    graph: Graph, dummy_embedding: np.ndarray
+) -> None:
+    result = run_decay(graph, TEST_PROJECT)
+    assert result.nodes_decayed == 0
+    assert result.nodes_evicted == 0
+    assert result.nodes_promoted == 0
+
+
+def test_decay_result_project_field_matches(
+    graph: Graph, dummy_embedding: np.ndarray
+) -> None:
+    result = run_decay(graph, TEST_PROJECT)
+    assert result.project == TEST_PROJECT
+
+
+def test_tier3_node_never_decayed(graph: Graph, dummy_embedding: np.ndarray) -> None:
+    node = _make_node(dummy_embedding, tier=3, weight=100.0)
+    graph.write_node(node)
+    result = run_decay(graph, TEST_PROJECT)
+    nodes = graph.get_all_nodes(project=TEST_PROJECT)
+    assert nodes[0].weight == 100.0
+    assert result.nodes_decayed == 0
