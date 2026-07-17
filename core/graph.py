@@ -71,14 +71,14 @@ def _node_filter(
     *,
     tier: int | None = None,
     source: str | None = None,
-) -> tuple[str, list[Any]]:
+) -> tuple[str, list[str | int]]:
     """Build a WHERE clause and params list for node queries.
 
     Always includes project = ?. Appends tier and/or source filters when
     provided. Returns (where_clause, params) ready for cursor.execute.
     """
     clauses = ["project = ?"]
-    params: list[Any] = [project]
+    params: list[str | int] = [project]
     if tier is not None:
         clauses.append("tier = ?")
         params.append(tier)
@@ -127,7 +127,7 @@ class Graph:
         self._conn = connection
         self._conn.row_factory = sqlite3.Row
 
-    def _exec_nodes(self, sql: str, params: list[Any]) -> list[Node]:
+    def _exec_nodes(self, sql: str, params: list[str | int]) -> list[Node]:
         """Execute a SELECT query and return the results as Node objects."""
         return [_row_to_node(row) for row in self._conn.execute(sql, params).fetchall()]
 
