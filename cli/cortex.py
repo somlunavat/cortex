@@ -1063,7 +1063,9 @@ def touch(
         console.print(f"[red]Node not found:[/red] {node_id}")
         raise typer.Exit(1)
     g.touch_nodes([node_id], now=int(time.time()))
-    console.print(f"[green]Touched[/green] {node_id[:8]}…  (weight +{TOUCH_WEIGHT_BUMP})")
+    console.print(
+        f"[green]Touched[/green] {node_id[:8]}…  (weight +{TOUCH_WEIGHT_BUMP})"
+    )
 
 
 @app.command()
