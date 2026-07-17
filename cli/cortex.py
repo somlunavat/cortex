@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from cli.config import open_graph
 from core.decay import run_decay
-from core.graph import Graph
+from core.graph import TOUCH_WEIGHT_BUMP, Graph
 
 app = typer.Typer(
     name="cortex",
@@ -1063,7 +1063,7 @@ def touch(
         console.print(f"[red]Node not found:[/red] {node_id}")
         raise typer.Exit(1)
     g.touch_nodes([node_id], now=int(time.time()))
-    console.print(f"[green]Touched[/green] {node_id[:8]}…  (weight +0.1)")
+    console.print(f"[green]Touched[/green] {node_id[:8]}…  (weight +{TOUCH_WEIGHT_BUMP})")
 
 
 @app.command()
