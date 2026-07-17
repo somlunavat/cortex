@@ -1586,3 +1586,41 @@ class TestGetSessionRecords:
         self._write_session(graph, ended_at=6000, nodes_written=7)
         records = graph.get_session_records(TEST_PROJECT)
         assert records[0]["nodes_written"] == 7
+
+
+# ---------------------------------------------------------------------------
+# TestQueryNodesPageSortCols
+# ---------------------------------------------------------------------------
+
+
+class TestQueryNodesPageSortCols:
+    def test_sort_by_created_at(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="older node"))
+        graph.write_node(_make_node(dummy_embedding, text="newer node"))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT, sort_col="created_at")
+        assert total == 2
+        assert len(nodes) == 2
+
+    def test_sort_by_last_accessed(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="node a"))
+        graph.write_node(_make_node(dummy_embedding, text="node b"))
+        _nodes, total = graph.query_nodes_page(TEST_PROJECT, sort_col="last_accessed")
+        assert total == 2
+
+    def test_source_filter_in_page(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="jsonl node", source="jsonl"))
+        graph.write_node(_make_node(dummy_embedding, text="ast node", source="ast"))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT, source="jsonl")
+        assert total == 1
+        assert nodes[0].source == "jsonl"
+
+    def test_empty_project_returns_zero_total(self, graph: Graph) -> None:
+        nodes, total = graph.query_nodes_page(TEST_PROJECT)
+        assert total == 0
+        assert nodes == []
