@@ -588,3 +588,60 @@ def test_enforce_budget_node_counts(
     ]
     result = _enforce_budget(tier3, candidates, budget)
     assert len(result) >= min(expect_at_least, n_tier3 + n_candidates)
+
+
+# ---------------------------------------------------------------------------
+# Additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestBuildBM25IndexEdgeCases:
+    def test_single_node_index_usable(self) -> None:
+        from core.retrieval import build_bm25_index
+
+        node = _make_node("authentication token required for all requests")
+        index = build_bm25_index([node])
+        assert index is not None
+
+    def test_index_built_from_multiple_nodes(self) -> None:
+        from core.retrieval import build_bm25_index
+
+        nodes = [
+            _make_node("auth middleware validates tokens"),
+            _make_node("database pool manages connections"),
+            _make_node("cache eviction uses LRU policy"),
+        ]
+        index = build_bm25_index(nodes)
+        assert index is not None
+
+
+class TestVectorChannelEdgeCases:
+    def test_zero_vector_returns_results(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        query = np.zeros(384, dtype=np.float32)
+        node = _make_node("auth check", rng)
+        scores = vector_channel(query, [node])
+        assert len(scores) == 1
+
+    def test_empty_nodes_returns_empty(self, rng: np.random.Generator) -> None:
+        query = rng.random(384).astype(np.float32)
+        scores = vector_channel(query, [])
+        assert scores == []
+
+
+class TestBM25ChannelEdgeCases:
+    def test_empty_query_string_returns_zeros(self) -> None:
+        nodes = [_make_node("auth middleware validates tokens")]
+        index = build_bm25_index(nodes)
+        scores = bm25_channel("", nodes, index)
+        assert all(s.score == 0.0 for s in scores)
+
+    def test_query_with_no_match_returns_zeros(self) -> None:
+        nodes = [
+            _make_node("auth middleware validates tokens"),
+            _make_node("database pool manages connections"),
+        ]
+        index = build_bm25_index(nodes)
+        scores = bm25_channel("xyzzy_not_found", nodes, index)
+        assert all(s.score == 0.0 for s in scores)
