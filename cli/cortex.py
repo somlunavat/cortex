@@ -386,7 +386,7 @@ def search(
     )
 
     if output_json:
-        results = []
+        results: list[dict[str, object]] = []
         for score, node in scored:
             if score <= 0.0 or len(results) >= limit:
                 break
