@@ -622,12 +622,32 @@ def stats(
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"
     ),
+    output_json: bool = typer.Option(False, "--json", help="Output stats as JSON"),
 ) -> None:
     """Show aggregate memory statistics across all sessions."""
     g, project = _require_graph(project_path)
     agg = g.get_aggregate_stats(project)
     tier_counts: dict[int, int] = agg["tier_counts"]
     node_total = sum(tier_counts.values())
+
+    if output_json:
+        record = {
+            "session_count": agg["session_count"],
+            "first_session": agg["first_session"],
+            "last_session": agg["last_session"],
+            "nodes_total": node_total,
+            "tier_counts": {
+                "tier1": tier_counts.get(1, 0),
+                "tier2": tier_counts.get(2, 0),
+                "tier3": tier_counts.get(3, 0),
+            },
+            "total_written": agg["total_written"],
+            "total_evicted": agg["total_evicted"],
+            "total_promoted": agg["total_promoted"],
+            "total_saved": agg["total_saved"],
+        }
+        print(json.dumps(record, indent=2))
+        return
 
     table = Table(title=f"Aggregate stats — {project}")
     table.add_column("Metric", style="cyan")
@@ -1063,6 +1083,7 @@ def count(
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"
     ),
+    output_json: bool = typer.Option(False, "--json", help="Output count as JSON"),
 ) -> None:
     """Print the total number of memory nodes, optionally filtered by tier.
 
@@ -1081,6 +1102,19 @@ def count(
     else:
         cnt, _ = tier_map.get(tier, (0, 0.0))
         total = cnt
+
+    if output_json:
+        if tier == 0:
+            record = {
+                "total": total,
+                "tier1": tier_map.get(1, (0, 0.0))[0],
+                "tier2": tier_map.get(2, (0, 0.0))[0],
+                "tier3": tier_map.get(3, (0, 0.0))[0],
+            }
+        else:
+            record = {"tier": tier, "total": total}
+        print(json.dumps(record))
+        return
 
     console.print(str(total))
 
