@@ -1320,6 +1320,46 @@ class TestInspectCommand:
         assert result.exit_code == 0
         assert node_id in result.output
 
+    def test_json_flag_outputs_valid_json(self, tmp_db: Path, project: str) -> None:
+        node_id = _seed_node(tmp_db, project, text="json node")
+        result = runner.invoke(
+            app,
+            ["inspect", node_id, "--json"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert isinstance(parsed, dict)
+
+    def test_json_flag_includes_all_fields(self, tmp_db: Path, project: str) -> None:
+        node_id = _seed_node(tmp_db, project, text="field check node")
+        result = runner.invoke(
+            app,
+            ["inspect", node_id, "--json"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        parsed = json.loads(result.output)
+        for field in (
+            "id",
+            "type",
+            "tier",
+            "text",
+            "weight",
+            "source",
+            "last_accessed",
+        ):
+            assert field in parsed
+
+    def test_json_flag_missing_node_still_exits_1(
+        self, tmp_db: Path, project: str
+    ) -> None:
+        result = runner.invoke(
+            app,
+            ["inspect", "00000000-0000-0000-0000-000000000000", "--json"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+
 
 # ---------------------------------------------------------------------------
 # cortex prune
