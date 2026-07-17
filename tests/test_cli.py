@@ -1676,6 +1676,24 @@ class TestSearchCommand:
             scores = [r["score"] for r in data]
             assert scores == sorted(scores, reverse=True)
 
+    def test_query_too_long_exits_nonzero(self, tmp_db: Path) -> None:
+        long_query = "x" * 513
+        result = self._invoke_search(tmp_db, long_query)
+        assert result.exit_code != 0
+        assert "too long" in result.output.lower() or "Query" in result.output
+
+    def test_query_at_max_length_is_accepted(self, tmp_db: Path) -> None:
+        query_512 = "auth " * 102 + "au"
+        assert len(query_512) == 512
+        result = self._invoke_search(tmp_db, query_512)
+        assert result.exit_code == 0
+
+    def test_query_over_max_length_rejected(self, tmp_db: Path) -> None:
+        query_513 = "a" * 513
+        result = self._invoke_search(tmp_db, query_513)
+        assert result.exit_code == 1
+        assert "513" in result.output or "512" in result.output
+
 
 # cortex status — last-session branch (lines 116-122)
 # ---------------------------------------------------------------------------
