@@ -16,6 +16,8 @@ import numpy as np
 
 from core.embedder import cosine_similarity, deserialize, serialize
 
+TOUCH_WEIGHT_BUMP: float = 0.1
+
 
 @lru_cache(maxsize=4096)
 def _cached_deserialize(blob: bytes, precision_bits: int) -> np.ndarray:
@@ -675,7 +677,7 @@ class Graph:
         if not node_ids:
             return
         placeholders = ",".join("?" * len(node_ids))
-        sql = f"UPDATE nodes SET last_accessed = ?, weight = weight + 0.1, session_count = session_count + 1 WHERE id IN ({placeholders})"  # nosec B608
+        sql = f"UPDATE nodes SET last_accessed = ?, weight = weight + {TOUCH_WEIGHT_BUMP}, session_count = session_count + 1 WHERE id IN ({placeholders})"  # nosec B608
         self._conn.execute(sql, [now, *node_ids])
         self._conn.commit()
 
