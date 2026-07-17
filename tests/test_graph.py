@@ -1495,3 +1495,94 @@ class TestMeetsPromotionCriteriaTier3:
         assert (
             _meets_promotion_criteria(tier3_node, decayed_weight=99.0, now=0) is False
         )
+
+
+# ---------------------------------------------------------------------------
+# TestGetSessionRecords
+# ---------------------------------------------------------------------------
+
+
+class TestGetSessionRecords:
+    def _write_session(
+        self,
+        graph: Graph,
+        ended_at: int,
+        nodes_written: int = 1,
+        tokens_raw: int | None = None,
+        tokens_injected: int | None = None,
+    ) -> str:
+        import uuid as _uuid
+
+        sid = str(_uuid.uuid4())
+        graph.write_session(
+            session_id=sid,
+            project=TEST_PROJECT,
+            started_at=ended_at - 60,
+            ended_at=ended_at,
+            nodes_written=nodes_written,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="",
+            tokens_raw=tokens_raw,
+            tokens_injected=tokens_injected,
+        )
+        return sid
+
+    def test_empty_returns_empty_list(self, graph: Graph) -> None:
+        records = graph.get_session_records(TEST_PROJECT)
+        assert records == []
+
+    def test_returns_written_session(self, graph: Graph) -> None:
+        sid = self._write_session(graph, ended_at=2000)
+        records = graph.get_session_records(TEST_PROJECT)
+        assert len(records) == 1
+        assert records[0]["id"] == sid
+
+    def test_ordered_by_ended_at_desc(self, graph: Graph) -> None:
+        sid_old = self._write_session(graph, ended_at=1000)
+        sid_new = self._write_session(graph, ended_at=2000)
+        records = graph.get_session_records(TEST_PROJECT)
+        assert records[0]["id"] == sid_new
+        assert records[1]["id"] == sid_old
+
+    def test_limit_respected(self, graph: Graph) -> None:
+        for i in range(5):
+            self._write_session(graph, ended_at=1000 + i * 100)
+        records = graph.get_session_records(TEST_PROJECT, limit=2)
+        assert len(records) == 2
+
+    def test_tokens_raw_injected_stored(self, graph: Graph) -> None:
+        self._write_session(graph, ended_at=3000, tokens_raw=800, tokens_injected=300)
+        records = graph.get_session_records(TEST_PROJECT)
+        assert records[0]["tokens_raw"] == 800
+        assert records[0]["tokens_injected"] == 300
+
+    def test_null_tokens_stored_as_none(self, graph: Graph) -> None:
+        self._write_session(graph, ended_at=4000, tokens_raw=None, tokens_injected=None)
+        records = graph.get_session_records(TEST_PROJECT)
+        assert records[0]["tokens_raw"] is None
+        assert records[0]["tokens_injected"] is None
+
+    def test_different_project_excluded(self, graph: Graph) -> None:
+        self._write_session(graph, ended_at=5000)
+        import uuid as _uuid
+
+        other_sid = str(_uuid.uuid4())
+        graph.write_session(
+            session_id=other_sid,
+            project="/other/project",
+            started_at=4940,
+            ended_at=5000,
+            nodes_written=1,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="",
+        )
+        records = graph.get_session_records(TEST_PROJECT)
+        ids = [r["id"] for r in records]
+        assert other_sid not in ids
+
+    def test_records_include_nodes_written(self, graph: Graph) -> None:
+        self._write_session(graph, ended_at=6000, nodes_written=7)
+        records = graph.get_session_records(TEST_PROJECT)
+        assert records[0]["nodes_written"] == 7
