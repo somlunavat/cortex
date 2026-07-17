@@ -247,7 +247,10 @@ def graph() -> None:
 
 
 @app.command()
-def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> None:
+def inspect(
+    node_id: str = typer.Argument(..., help="Node UUID to inspect"),
+    output_json: bool = typer.Option(False, "--json", help="Output node as JSON"),
+) -> None:
     """Display full metadata for a single node."""
     _require_uuid(node_id)
     g, _ = _require_graph("", exit_code=1)
@@ -256,6 +259,25 @@ def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> 
     if target is None:
         console.print(f"[red]Node not found:[/red] {node_id}")
         raise typer.Exit(1)
+
+    if output_json:
+        record = {
+            "id": target.id,
+            "type": target.type,
+            "tier": target.tier,
+            "text": target.text,
+            "rationale": target.rationale,
+            "weight": target.weight,
+            "session_count": target.session_count,
+            "precision_bits": target.precision_bits,
+            "scope": target.scope,
+            "source": target.source,
+            "project": target.project,
+            "last_accessed": target.last_accessed,
+            "created_at": target.created_at,
+        }
+        print(json.dumps(record, indent=2))
+        return
 
     table = Table(title=f"Node {node_id[:8]}…")
     table.add_column("Field", style="cyan")
