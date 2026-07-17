@@ -17,6 +17,7 @@ Commands:
 from __future__ import annotations
 
 import json
+import re as _re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -74,6 +75,19 @@ def _fmt_ts(ts: int | None) -> str:
     if not ts:
         return "—"
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+
+_UUID_RE = _re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    _re.IGNORECASE,
+)
+
+
+def _require_uuid(node_id: str) -> None:
+    """Exit with error if node_id is not a valid UUID4 hex string."""
+    if not _UUID_RE.match(node_id):
+        console.print(f"[red]Invalid node ID (expected UUID):[/red] {node_id!r}")
+        raise typer.Exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +249,7 @@ def graph() -> None:
 @app.command()
 def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> None:
     """Display full metadata for a single node."""
+    _require_uuid(node_id)
     g, _ = _require_graph("", exit_code=1)
     target = g.get_node(node_id)
 
@@ -264,6 +279,7 @@ def inspect(node_id: str = typer.Argument(..., help="Node UUID to inspect")) -> 
 @app.command()
 def prune(node_id: str = typer.Argument(..., help="Node UUID to evict")) -> None:
     """Manually evict a node from the graph."""
+    _require_uuid(node_id)
     g, _ = _require_graph("", exit_code=1)
     target = g.get_node(node_id)
 
@@ -383,6 +399,7 @@ def similar(
     ),
 ) -> None:
     """Find the most embedding-similar nodes to a given node."""
+    _require_uuid(node_id)
     if not (0.0 <= threshold <= 1.0):
         console.print("[red]--threshold must be between 0.0 and 1.0.[/red]")
         raise typer.Exit(1)
@@ -735,6 +752,7 @@ def pin(
     Tier-3 nodes are never decayed or evicted by the automatic scheduler.
     Embedding precision is downcast to 2 bits on promotion.
     """
+    _require_uuid(node_id)
     g, _ = _require_graph(project_path, exit_code=1)
     target = g.get_node(node_id)
     if target is None:
@@ -783,6 +801,7 @@ def annotate(
     The rationale is injected alongside the node text so Claude sees the
     'why' behind a convention or decision.
     """
+    _require_uuid(node_id)
     g, _ = _require_graph(project_path, exit_code=1)
     target = g.get_node(node_id)
     if target is None:
@@ -811,6 +830,7 @@ def bump(
     Useful for manually signalling that a node is important without waiting
     for automatic access-based weighting.
     """
+    _require_uuid(node_id)
     g, _ = _require_graph(project_path, exit_code=1)
     target = g.get_node(node_id)
     if target is None:
@@ -1057,6 +1077,7 @@ def touch(
     """
     import time
 
+    _require_uuid(node_id)
     g, _project = _require_graph(project_path)
     node = g.get_node(node_id)
     if node is None:

@@ -2155,10 +2155,75 @@ class TestTouchCommand:
     def test_touch_no_db_exits_cleanly(self, tmp_path: Path) -> None:
         result = runner.invoke(
             app,
-            ["touch", "some-id", "--project", str(tmp_path)],
+            [
+                "touch",
+                "00000000-0000-0000-0000-000000000000",
+                "--project",
+                str(tmp_path),
+            ],
             env={"CORTEX_DB_PATH": str(tmp_path / "none.db")},
         )
         assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# UUID validation (_require_uuid)
+# ---------------------------------------------------------------------------
+
+
+class TestUUIDValidation:
+    """_require_uuid rejects non-UUID strings before any DB access."""
+
+    def _run(self, cmd: str, node_id: str, tmp_db: Path, project: str) -> object:
+        return runner.invoke(
+            app,
+            [cmd, node_id, "--project", project],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+
+    @pytest.mark.parametrize(
+        "bad_id",
+        [
+            "not-a-uuid",
+            "123",
+            "gggggggg-0000-0000-0000-000000000000",
+            "",
+        ],
+    )
+    def test_inspect_rejects_invalid_uuid(
+        self, bad_id: str, tmp_db: Path, project: str
+    ) -> None:
+        result = runner.invoke(
+            app,
+            ["inspect", bad_id] if bad_id else ["inspect", "x"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        # either exit 1 or typer's missing-argument error
+        assert result.exit_code != 0
+
+    def test_prune_rejects_invalid_uuid(self, tmp_db: Path, project: str) -> None:
+        result = runner.invoke(
+            app,
+            ["prune", "bad-uuid"],
+            env={"CORTEX_DB_PATH": str(tmp_db)},
+        )
+        assert result.exit_code != 0
+        assert "Invalid node ID" in result.output
+
+    def test_touch_rejects_invalid_uuid(self, tmp_db: Path, project: str) -> None:
+        result = self._run("touch", "not-a-uuid", tmp_db, project)
+        assert result.exit_code != 0
+        assert "Invalid node ID" in result.output
+
+    def test_bump_rejects_invalid_uuid(self, tmp_db: Path, project: str) -> None:
+        result = self._run("bump", "not-a-uuid", tmp_db, project)
+        assert result.exit_code != 0
+        assert "Invalid node ID" in result.output
+
+    def test_valid_uuid_passes_validation(self, tmp_db: Path, project: str) -> None:
+        node_id = _seed_node(tmp_db, project)
+        result = self._run("touch", node_id, tmp_db, project)
+        assert "Invalid node ID" not in result.output
 
 
 # ---------------------------------------------------------------------------
