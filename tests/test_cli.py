@@ -1636,6 +1636,46 @@ class TestSearchCommand:
         result = self._invoke_search(tmp_db, "auth", ["--limit", "3"])
         assert result.exit_code == 0
 
+    def test_json_flag_returns_array(self, tmp_db: Path) -> None:
+        cwd_proj = self._cwd_project()
+        _seed_node(tmp_db, cwd_proj, text="authentication middleware critical", tier=1)
+        _seed_node(tmp_db, cwd_proj, text="cache eviction policy details", tier=1)
+        _seed_node(tmp_db, cwd_proj, text="database pool configuration notes", tier=1)
+        result = self._invoke_search(tmp_db, "authentication", ["--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+
+    def test_json_flag_result_has_required_fields(self, tmp_db: Path) -> None:
+        cwd_proj = self._cwd_project()
+        _seed_node(
+            tmp_db, cwd_proj, text="authentication token policy enforced", tier=1
+        )
+        _seed_node(tmp_db, cwd_proj, text="cache eviction rules applied", tier=1)
+        _seed_node(tmp_db, cwd_proj, text="database migration tooling setup", tier=1)
+        result = self._invoke_search(tmp_db, "authentication", ["--json"])
+        data = json.loads(result.output)
+        assert len(data) > 0
+        first = data[0]
+        for field in ("id", "type", "tier", "text", "score", "weight", "project"):
+            assert field in first, f"missing field: {field}"
+
+    def test_json_flag_no_nodes_returns_empty_array(self, tmp_db: Path) -> None:
+        result = self._invoke_search(tmp_db, "auth", ["--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == []
+
+    def test_json_flag_scores_descending(self, tmp_db: Path) -> None:
+        cwd_proj = self._cwd_project()
+        _seed_node(tmp_db, cwd_proj, text="auth auth auth authentication token", tier=1)
+        _seed_node(tmp_db, cwd_proj, text="unrelated cache config policy", tier=1)
+        _seed_node(tmp_db, cwd_proj, text="database migration schema setup", tier=1)
+        result = self._invoke_search(tmp_db, "auth", ["--json"])
+        data = json.loads(result.output)
+        if len(data) >= 2:
+            scores = [r["score"] for r in data]
+            assert scores == sorted(scores, reverse=True)
+
 
 # cortex status — last-session branch (lines 116-122)
 # ---------------------------------------------------------------------------

@@ -347,6 +347,7 @@ def search(
         "-s",
         help="Filter by extraction source: jsonl, ast, git, or nlp",
     ),
+    output_json: bool = typer.Option(False, "--json", help="Output results as JSON"),
 ) -> None:
     """Search memory nodes by text using BM25 ranking."""
     g, project = _require_graph("")
@@ -365,7 +366,10 @@ def search(
         nodes = g.get_all_nodes(project=project, tier=tier if tier else None)
 
     if not nodes:
-        console.print("No nodes found.")
+        if output_json:
+            print(json.dumps([]))
+        else:
+            console.print("No nodes found.")
         raise typer.Exit(0)
 
     from rank_bm25 import BM25Okapi
@@ -380,6 +384,25 @@ def search(
         key=lambda x: x[0],
         reverse=True,
     )
+
+    if output_json:
+        results: list[dict[str, object]] = []
+        for score, node in scored:
+            if score <= 0.0 or len(results) >= limit:
+                break
+            results.append(
+                {
+                    "score": round(float(score), 6),
+                    "id": node.id,
+                    "type": node.type,
+                    "tier": node.tier,
+                    "text": node.text,
+                    "weight": node.weight,
+                    "project": node.project,
+                }
+            )
+        print(json.dumps(results, indent=2))
+        return
 
     table = Table(title=f'Search: "{query}"')
     table.add_column("Score", style="yellow", justify="right")
