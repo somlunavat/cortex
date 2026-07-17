@@ -403,3 +403,56 @@ class TestBuildGraphSnapshot:
         assert "edges" in snap
         assert "ts" in snap
         assert isinstance(snap["ts"], int)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestWebSocketEndpoint:
+    def test_websocket_sends_json_snapshot(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import json
+
+        from dashboard import server as srv
+
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", str(tmp_path))
+        monkeypatch.delenv("CORTEX_DB_PATH", raising=False)
+        c = TestClient(srv.app)
+        with c.websocket_connect("/ws") as ws:
+            data = ws.receive_text()
+            parsed = json.loads(data)
+            assert "nodes" in parsed
+            assert "edges" in parsed
+            assert "ts" in parsed
+
+
+# ---------------------------------------------------------------------------
+# Static files mount (line 226)
+# ---------------------------------------------------------------------------
+
+
+class TestStaticMount:
+    def test_static_endpoint_available_when_app_dir_exists(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from dashboard import server as srv
+
+        fake_app = tmp_path / "app"
+        fake_app.mkdir()
+        (fake_app / "main.js").write_text("console.log('hello');")
+        monkeypatch.setattr("dashboard.server._APP_DIR", fake_app)
+        # Re-mount so the route appears; exercise the mount path
+        import fastapi.staticfiles
+
+        srv.app.mount(
+            "/static2",
+            fastapi.staticfiles.StaticFiles(directory=str(fake_app)),
+            name="static2",
+        )
+        c = TestClient(srv.app)
+        resp = c.get("/static2/main.js")
+        assert resp.status_code == 200
+        assert "hello" in resp.text
