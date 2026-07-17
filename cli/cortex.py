@@ -584,14 +584,39 @@ def sessions(
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"
     ),
+    output_json: bool = typer.Option(False, "--json", help="Output sessions as JSON"),
 ) -> None:
     """List recent extraction sessions with node and token stats."""
     g, project = _require_graph(project_path)
     rows = g.get_session_records(project, limit=limit)
 
     if not rows:
-        console.print("[dim]No sessions recorded for this project.[/dim]")
+        if output_json:
+            print(json.dumps([]))
+        else:
+            console.print("[dim]No sessions recorded for this project.[/dim]")
         raise typer.Exit(0)
+
+    if output_json:
+        records = []
+        for row in rows:
+            tokens_saved = None
+            if row["tokens_raw"] is not None and row["tokens_injected"] is not None:
+                tokens_saved = row["tokens_raw"] - row["tokens_injected"]
+            records.append(
+                {
+                    "id": row["id"],
+                    "ended_at": row["ended_at"],
+                    "nodes_written": row["nodes_written"] or 0,
+                    "nodes_evicted": row["nodes_evicted"] or 0,
+                    "nodes_promoted": row["nodes_promoted"] or 0,
+                    "tokens_raw": row["tokens_raw"],
+                    "tokens_injected": row["tokens_injected"],
+                    "tokens_saved": tokens_saved,
+                }
+            )
+        print(json.dumps(records, indent=2))
+        return
 
     table = Table(title=f"Sessions — {project}")
     table.add_column("Ended", style="cyan", no_wrap=True)
