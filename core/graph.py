@@ -18,6 +18,11 @@ from core.embedder import cosine_similarity, deserialize, serialize
 
 TOUCH_WEIGHT_BUMP: float = 0.1
 
+_NODE_COLUMNS = (
+    "id, type, tier, text, rationale, embedding, precision_bits, "
+    "weight, project, scope, source, last_accessed, created_at, session_count"
+)
+
 
 @lru_cache(maxsize=4096)
 def _cached_deserialize(blob: bytes, precision_bits: int) -> np.ndarray:
@@ -274,7 +279,7 @@ class Graph:
             raise ValueError(f"limit must be >= 1, got {limit}")
 
         rows = self._conn.execute(
-            "SELECT * FROM nodes WHERE project = ? AND embedding IS NOT NULL",
+            f"SELECT {_NODE_COLUMNS} FROM nodes WHERE project = ? AND embedding IS NOT NULL",  # nosec B608
             (project,),
         ).fetchall()
 
@@ -298,7 +303,8 @@ class Graph:
             Node dataclass, or None.
         """
         row = self._conn.execute(
-            "SELECT * FROM nodes WHERE id = ?", (node_id,)
+            f"SELECT {_NODE_COLUMNS} FROM nodes WHERE id = ?",  # nosec B608
+            (node_id,),
         ).fetchone()
         if row is None:
             return None
@@ -319,7 +325,7 @@ class Graph:
         """
         where, params = _node_filter(project, tier=tier)
         return self._exec_nodes(
-            f"SELECT * FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
+            f"SELECT {_NODE_COLUMNS} FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
             params,
         )
 
@@ -340,7 +346,7 @@ class Graph:
         """
         where, params = _node_filter(project, source=source, tier=tier)
         return self._exec_nodes(
-            f"SELECT * FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
+            f"SELECT {_NODE_COLUMNS} FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
             params,
         )
 
@@ -640,7 +646,7 @@ class Graph:
         where += " AND last_accessed < ?"
         params.append(cutoff)
         return self._exec_nodes(
-            f"SELECT * FROM nodes WHERE {where} ORDER BY last_accessed ASC",  # nosec B608
+            f"SELECT {_NODE_COLUMNS} FROM nodes WHERE {where} ORDER BY last_accessed ASC",  # nosec B608
             params,
         )
 
