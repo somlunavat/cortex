@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
 import time
 import uuid
@@ -74,9 +73,7 @@ def client(db_path: Path, project: str, monkeypatch: pytest.MonkeyPatch) -> Test
     from dashboard import server as srv
 
     monkeypatch.setenv("CLAUDE_PROJECT_PATH", project)
-    monkeypatch.setattr(
-        "cli.config.db_path", lambda root: db_path if str(root) == project else db_path
-    )
+    monkeypatch.setattr("cli.config.db_path", lambda root: db_path)
     return TestClient(srv.app)
 
 
