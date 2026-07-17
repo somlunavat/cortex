@@ -15,9 +15,11 @@ from core.decay import (
     TIER1_PROMOTION_SESSIONS,
     TIER1_PROMOTION_WEIGHT,
     TIER2_DECAY_RATE,
+    TIER2_PROMOTION_AGE_DAYS,
     TIER2_PROMOTION_SESSIONS,
     TIER2_PROMOTION_WEIGHT,
     DecayResult,
+    _meets_promotion_criteria,
     run_decay,
 )
 from core.graph import Graph, Node
@@ -417,3 +419,94 @@ class TestDecayResult:
         if nodes:
             expected = 5.0 * (TIER1_DECAY_RATE**3)
             assert nodes[0].weight == pytest.approx(expected, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# _meets_promotion_criteria — parametrized unit tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "weight, session_count, expected",
+    [
+        # Meets both criteria
+        (TIER1_PROMOTION_WEIGHT, TIER1_PROMOTION_SESSIONS, True),
+        (TIER1_PROMOTION_WEIGHT + 5.0, TIER1_PROMOTION_SESSIONS + 2, True),
+        # Too light
+        (TIER1_PROMOTION_WEIGHT - 0.1, TIER1_PROMOTION_SESSIONS, False),
+        # Too few sessions
+        (TIER1_PROMOTION_WEIGHT, TIER1_PROMOTION_SESSIONS - 1, False),
+        # Both too low
+        (TIER1_PROMOTION_WEIGHT - 1.0, TIER1_PROMOTION_SESSIONS - 1, False),
+    ],
+)
+def test_meets_promotion_criteria_tier1(
+    weight: float,
+    session_count: int,
+    expected: bool,
+    dummy_embedding: np.ndarray,
+) -> None:
+    node = _make_node(
+        dummy_embedding, tier=1, weight=weight, session_count=session_count
+    )
+    now = int(time.time())
+    assert _meets_promotion_criteria(node, weight, now) is expected
+
+
+@pytest.mark.parametrize(
+    "weight, session_count, age_days, expected",
+    [
+        # All criteria met
+        (
+            TIER2_PROMOTION_WEIGHT,
+            TIER2_PROMOTION_SESSIONS,
+            TIER2_PROMOTION_AGE_DAYS,
+            True,
+        ),
+        # Too light
+        (
+            TIER2_PROMOTION_WEIGHT - 0.1,
+            TIER2_PROMOTION_SESSIONS,
+            TIER2_PROMOTION_AGE_DAYS,
+            False,
+        ),
+        # Too few sessions
+        (
+            TIER2_PROMOTION_WEIGHT,
+            TIER2_PROMOTION_SESSIONS - 1,
+            TIER2_PROMOTION_AGE_DAYS,
+            False,
+        ),
+        # Too young (1 day short)
+        (
+            TIER2_PROMOTION_WEIGHT,
+            TIER2_PROMOTION_SESSIONS,
+            TIER2_PROMOTION_AGE_DAYS - 1,
+            False,
+        ),
+    ],
+)
+def test_meets_promotion_criteria_tier2(
+    weight: float,
+    session_count: int,
+    age_days: int,
+    expected: bool,
+    dummy_embedding: np.ndarray,
+) -> None:
+    now = int(time.time())
+    created_at = now - int(age_days * SECONDS_PER_DAY)
+    node = _make_node(
+        dummy_embedding,
+        tier=2,
+        weight=weight,
+        session_count=session_count,
+        created_at=created_at,
+    )
+    assert _meets_promotion_criteria(node, weight, now) is expected
+
+
+def test_meets_promotion_criteria_tier3_always_false(
+    dummy_embedding: np.ndarray,
+) -> None:
+    node = _make_node(dummy_embedding, tier=3, weight=100.0, session_count=100)
+    assert _meets_promotion_criteria(node, 100.0, int(time.time())) is False
