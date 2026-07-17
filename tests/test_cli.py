@@ -2155,7 +2155,12 @@ class TestTouchCommand:
     def test_touch_no_db_exits_cleanly(self, tmp_path: Path) -> None:
         result = runner.invoke(
             app,
-            ["touch", "00000000-0000-0000-0000-000000000000", "--project", str(tmp_path)],
+            [
+                "touch",
+                "00000000-0000-0000-0000-000000000000",
+                "--project",
+                str(tmp_path),
+            ],
             env={"CORTEX_DB_PATH": str(tmp_path / "none.db")},
         )
         assert result.exit_code == 0
