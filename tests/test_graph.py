@@ -1211,6 +1211,24 @@ class TestSessionExists:
         )
         assert graph.session_exists("/tmp/session_b.jsonl") is False
 
+    def test_empty_string_path_returns_false(self, graph: Graph) -> None:
+        assert graph.session_exists("") is False
+
+    def test_returns_false_for_similar_but_different_path(self, graph: Graph) -> None:
+        path = "/tmp/my_session.jsonl"
+        now = int(time.time())
+        graph.write_session(
+            session_id="sim-id",
+            project=TEST_PROJECT,
+            started_at=now - 60,
+            ended_at=now,
+            nodes_written=0,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path=path,
+        )
+        assert graph.session_exists("/tmp/my_session.jsonl.bak") is False
+
 
 # ---------------------------------------------------------------------------
 # get_tier_counts
