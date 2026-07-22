@@ -389,6 +389,38 @@ class TestRetrieve:
         assert isinstance(result, list)
         assert all(isinstance(n, Node) for n in result)
 
+    def test_tier3_only_no_candidates_returns_tier3(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("always use type hints", tier=3, embedding=e))
+        graph.write_node(_make_node("prefer async over sync", tier=3, embedding=e))
+        result = retrieve("query", TEST_PROJECT, graph)
+        assert len(result) == 2
+        assert all(n.tier == 3 for n in result)
+
+    def test_tier3_nodes_appear_before_candidates(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("convention node", tier=3, embedding=e))
+        graph.write_node(_make_node("candidate node", tier=1, embedding=e))
+        result = retrieve("query", TEST_PROJECT, graph)
+        tier3_positions = [i for i, n in enumerate(result) if n.tier == 3]
+        non_tier3_positions = [i for i, n in enumerate(result) if n.tier < 3]
+        if tier3_positions and non_tier3_positions:
+            assert max(tier3_positions) < min(non_tier3_positions)
+
+    def test_multiple_tier3_all_returned(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        for i in range(5):
+            graph.write_node(_make_node(f"convention {i}", tier=3, embedding=e))
+        result = retrieve("query", TEST_PROJECT, graph)
+        tier3_count = sum(1 for n in result if n.tier == 3)
+        assert tier3_count == 5
+
 
 # ---------------------------------------------------------------------------
 # format_injection_block
