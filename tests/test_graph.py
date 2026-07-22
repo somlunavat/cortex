@@ -2048,3 +2048,20 @@ class TestQueryNodesPageSortCols:
         nodes, total = graph.query_nodes_page(TEST_PROJECT)
         assert total == 0
         assert nodes == []
+
+    def test_total_count_exceeds_nodes_when_limit_applied(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(5):
+            graph.write_node(_make_node(dummy_embedding, text=f"n{i}"))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT, limit=2)
+        assert total == 5
+        assert len(nodes) == 2
+
+    def test_weight_sort_highest_weight_first(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="low weight", weight=0.1))
+        graph.write_node(_make_node(dummy_embedding, text="high weight", weight=9.9))
+        nodes, _ = graph.query_nodes_page(TEST_PROJECT, sort_col="weight")
+        assert nodes[0].weight > nodes[1].weight
