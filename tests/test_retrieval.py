@@ -547,6 +547,18 @@ class TestFormatInjectionBlock:
             or "auth module refactored)" not in block
         )
 
+    def test_no_tier3_omits_conventions_section(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("some context", tier=1, embedding=e)]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "[CONVENTIONS" not in block
+
+    def test_no_tier12_omits_context_section(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("a convention", tier=3, embedding=e)]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "[RELEVANT CONTEXT" not in block
+
 
 # ---------------------------------------------------------------------------
 # Parametrized: fuse_scores weight proportions
