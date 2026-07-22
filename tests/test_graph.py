@@ -1348,6 +1348,77 @@ class TestGetAggregateStats:
         assert tier_counts[1] == 1
         assert tier_counts[3] == 1
 
+    def test_total_saved_sums_token_differences(self, graph: Graph) -> None:
+        now = int(time.time())
+        graph.write_session(
+            session_id="s1",
+            project=TEST_PROJECT,
+            started_at=now - 60,
+            ended_at=now,
+            nodes_written=1,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="/tmp/s1.jsonl",
+            tokens_raw=1000,
+            tokens_injected=200,
+        )
+        graph.write_session(
+            session_id="s2",
+            project=TEST_PROJECT,
+            started_at=now - 120,
+            ended_at=now - 60,
+            nodes_written=1,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="/tmp/s2.jsonl",
+            tokens_raw=500,
+            tokens_injected=100,
+        )
+        agg = graph.get_aggregate_stats(TEST_PROJECT)
+        assert agg["total_saved"] == (1000 - 200) + (500 - 100)
+
+    def test_first_and_last_session_timestamps(self, graph: Graph) -> None:
+        now = int(time.time())
+        graph.write_session(
+            session_id="old",
+            project=TEST_PROJECT,
+            started_at=now - 200,
+            ended_at=now - 100,
+            nodes_written=0,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="",
+        )
+        graph.write_session(
+            session_id="new",
+            project=TEST_PROJECT,
+            started_at=now - 60,
+            ended_at=now,
+            nodes_written=0,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="",
+        )
+        agg = graph.get_aggregate_stats(TEST_PROJECT)
+        assert agg["first_session"] == now - 200
+        assert agg["last_session"] == now
+
+    def test_project_isolation(self, graph: Graph) -> None:
+        now = int(time.time())
+        graph.write_session(
+            session_id="other",
+            project="/other/project",
+            started_at=now - 60,
+            ended_at=now,
+            nodes_written=99,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="",
+        )
+        agg = graph.get_aggregate_stats(TEST_PROJECT)
+        assert agg["session_count"] == 0
+        assert agg["total_written"] == 0
+
 
 # ---------------------------------------------------------------------------
 # query_nodes_page
