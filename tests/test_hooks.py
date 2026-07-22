@@ -679,6 +679,40 @@ class TestWireCoOccurringEdges:
         edges = graph.get_edges(id_a)
         assert len(edges) == 1  # still only one edge
 
+    def test_wire_multiple_pairs_creates_multiple_edges(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "x.py", "y.py", "z.py")
+        co_pairs: tuple[frozenset[str], ...] = (
+            frozenset({f"{TEST_PROJECT}/x.py", f"{TEST_PROJECT}/y.py"}),
+            frozenset({f"{TEST_PROJECT}/y.py", f"{TEST_PROJECT}/z.py"}),
+        )
+        _wire_co_occurring_edges(co_pairs, file_ids, TEST_PROJECT, graph)
+        id_y = file_ids.get("y.py")
+        assert id_y
+        edges = graph.get_edges(id_y)
+        assert len(edges) == 2
+
+    def test_wire_edge_accessible_from_both_nodes(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "a.py", "b.py")
+        co_pairs: tuple[frozenset[str], ...] = (
+            frozenset({f"{TEST_PROJECT}/a.py", f"{TEST_PROJECT}/b.py"}),
+        )
+        _wire_co_occurring_edges(co_pairs, file_ids, TEST_PROJECT, graph)
+        id_a = file_ids.get("a.py")
+        id_b = file_ids.get("b.py")
+        assert id_a and id_b
+        edges_a = graph.get_edges(id_a)
+        edges_b = graph.get_edges(id_b)
+        assert len(edges_a) == 1
+        assert len(edges_b) == 1
+
 
 # ---------------------------------------------------------------------------
 # compact.py (PostCompact hook)
