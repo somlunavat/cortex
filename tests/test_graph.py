@@ -653,6 +653,25 @@ class TestUpdateWeight:
         nodes = graph.get_all_nodes(project=TEST_PROJECT)
         assert nodes[0].weight >= 0.0
 
+    def test_zero_delta_leaves_weight_unchanged(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, weight=2.0))
+        graph.update_weight(node_id, delta=0.0)
+        node = graph.get_node(node_id)
+        assert node is not None
+        assert pytest.approx(2.0) == node.weight
+
+    def test_two_increments_accumulate(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, weight=1.0))
+        graph.update_weight(node_id, delta=0.5)
+        graph.update_weight(node_id, delta=0.5)
+        node = graph.get_node(node_id)
+        assert node is not None
+        assert pytest.approx(2.0) == node.weight
+
 
 # ---------------------------------------------------------------------------
 # Coverage gap tests
