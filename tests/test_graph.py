@@ -239,6 +239,48 @@ class TestMergeNode:
 
 
 # ---------------------------------------------------------------------------
+# MERGE_WEIGHT_BUMP constant and precise merge arithmetic
+# ---------------------------------------------------------------------------
+
+
+class TestMergeWeightBump:
+    def test_constant_value_is_point_five(self) -> None:
+        from core.graph import MERGE_WEIGHT_BUMP
+
+        assert pytest.approx(0.5) == MERGE_WEIGHT_BUMP
+
+    def test_merge_increases_weight_by_constant(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        from core.graph import MERGE_WEIGHT_BUMP
+
+        node = _make_node(dummy_embedding, weight=2.0)
+        nid = graph.write_node(node)
+        graph.merge_node(existing_id=nid, candidate=node)
+        updated = graph.get_node(nid)
+        assert updated is not None
+        assert updated.weight == pytest.approx(2.0 + MERGE_WEIGHT_BUMP, abs=1e-5)
+
+    def test_double_merge_increases_weight_by_two_bumps(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        from core.graph import MERGE_WEIGHT_BUMP
+
+        node = _make_node(dummy_embedding, weight=1.0)
+        nid = graph.write_node(node)
+        graph.merge_node(existing_id=nid, candidate=node)
+        graph.merge_node(existing_id=nid, candidate=node)
+        updated = graph.get_node(nid)
+        assert updated is not None
+        assert updated.weight == pytest.approx(1.0 + 2 * MERGE_WEIGHT_BUMP, abs=1e-5)
+
+    def test_touch_weight_bump_constant_value(self) -> None:
+        from core.graph import TOUCH_WEIGHT_BUMP
+
+        assert pytest.approx(0.1) == TOUCH_WEIGHT_BUMP
+
+
+# ---------------------------------------------------------------------------
 # find_similar
 # ---------------------------------------------------------------------------
 
