@@ -392,6 +392,42 @@ class TestDetectCoOccurringWrites:
     def test_empty_events_returns_empty(self) -> None:
         assert detect_co_occurring_writes([]) == ()
 
+    def test_three_files_within_window_produce_three_pairs(self) -> None:
+        events = [
+            _make_write_event("/proj/a.py", timestamp=0),
+            _make_write_event("/proj/b.py", timestamp=5),
+            _make_write_event("/proj/c.py", timestamp=10),
+        ]
+        pairs = detect_co_occurring_writes(events)
+        assert len(pairs) == 3
+        assert frozenset({"/proj/a.py", "/proj/b.py"}) in pairs
+        assert frozenset({"/proj/a.py", "/proj/c.py"}) in pairs
+        assert frozenset({"/proj/b.py", "/proj/c.py"}) in pairs
+
+    def test_exact_boundary_is_included(self) -> None:
+        events = [
+            _make_write_event("/proj/x.py", timestamp=0),
+            _make_write_event("/proj/y.py", timestamp=CO_OCCURRENCE_WINDOW_SECONDS),
+        ]
+        pairs = detect_co_occurring_writes(events)
+        assert frozenset({"/proj/x.py", "/proj/y.py"}) in pairs
+
+    def test_non_write_events_ignored_in_co_occurrence(self) -> None:
+        events = [
+            _make_write_event("/proj/a.py", timestamp=0),
+            _make_event(EventType.BASH_EXEC, timestamp=1, data={"command": "ls"}),
+            _make_event(EventType.FILE_READ, timestamp=2, data={"path": "/proj/b.py"}),
+            _make_write_event("/proj/c.py", timestamp=3),
+        ]
+        pairs = detect_co_occurring_writes(events)
+        assert frozenset({"/proj/a.py", "/proj/c.py"}) in pairs
+        assert len(pairs) == 1
+
+    def test_single_write_produces_no_pairs(self) -> None:
+        events = [_make_write_event("/proj/only.py", timestamp=0)]
+        pairs = detect_co_occurring_writes(events)
+        assert len(pairs) == 0
+
 
 # ---------------------------------------------------------------------------
 # extract_prose_turns
