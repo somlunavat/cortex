@@ -1265,6 +1265,33 @@ class TestGetTypeCounts:
     def test_empty_returns_empty_list(self, graph: Graph) -> None:
         assert graph.get_type_counts(TEST_PROJECT) == []
 
+    def test_project_isolation(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        graph.write_node(
+            _make_node(dummy_embedding, text="obs", node_type="observation")
+        )
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                text="other obs",
+                node_type="observation",
+                project="/other",
+            )
+        )
+        pairs = graph.get_type_counts(TEST_PROJECT)
+        assert len(pairs) == 1
+        assert pairs[0] == ("observation", 1)
+
+    def test_single_type_returns_one_entry(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(dummy_embedding, text="only fact", node_type="fact")
+        )
+        pairs = graph.get_type_counts(TEST_PROJECT)
+        assert len(pairs) == 1
+        assert pairs[0][0] == "fact"
+        assert pairs[0][1] == 1
+
 
 class TestGetSourceCounts:
     def test_groups_by_source(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
@@ -1274,6 +1301,20 @@ class TestGetSourceCounts:
         pairs = graph.get_source_counts(TEST_PROJECT)
         assert pairs[0] == ("jsonl", 2)
         assert pairs[1] == ("nlp", 1)
+
+    def test_empty_returns_empty_list(self, graph: Graph) -> None:
+        assert graph.get_source_counts(TEST_PROJECT) == []
+
+    def test_project_isolation(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="git1", source="git"))
+        graph.write_node(
+            _make_node(
+                dummy_embedding, text="other git", source="git", project="/other"
+            )
+        )
+        pairs = graph.get_source_counts(TEST_PROJECT)
+        assert len(pairs) == 1
+        assert pairs[0] == ("git", 1)
 
 
 # ---------------------------------------------------------------------------
