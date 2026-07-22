@@ -645,3 +645,92 @@ class TestBM25ChannelEdgeCases:
         index = build_bm25_index(nodes)
         scores = bm25_channel("xyzzy_not_found", nodes, index)
         assert all(s.score == 0.0 for s in scores)
+
+
+# ---------------------------------------------------------------------------
+# _format_node_line
+# ---------------------------------------------------------------------------
+
+
+class TestFormatNodeLine:
+    def _node_with_rationale(self, text: str, rationale: str | None) -> Node:
+        import time as _t
+
+        now = int(_t.time())
+        return Node(
+            id="",
+            type="observation",
+            tier=1,
+            text=text,
+            rationale=rationale,
+            embedding=None,
+            precision_bits=32,
+            weight=1.0,
+            project=TEST_PROJECT,
+            scope="project",
+            source="jsonl",
+            last_accessed=now,
+            created_at=now,
+            session_count=1,
+        )
+
+    def test_no_rationale_returns_bullet_text(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("auth middleware validates tokens", None)
+        line = _format_node_line(node)
+        assert line == "• auth middleware validates tokens"
+
+    def test_rationale_appended_in_parens(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale(
+            "use async/await", "avoids blocking the event loop"
+        )
+        line = _format_node_line(node)
+        assert "• use async/await" in line
+        assert "(avoids blocking the event loop)" in line
+
+    def test_empty_rationale_not_appended(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("some fact", "")
+        line = _format_node_line(node)
+        assert "(" not in line
+
+    def test_line_starts_with_bullet(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("any text", None)
+        line = _format_node_line(node)
+        assert line.startswith("•")
+
+
+# ---------------------------------------------------------------------------
+# count_tokens
+# ---------------------------------------------------------------------------
+
+
+class TestCountTokens:
+    def test_empty_string_returns_zero(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("") == 0
+
+    def test_single_word_returns_positive(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("hello") > 0
+
+    def test_longer_text_more_tokens(self) -> None:
+        from core.retrieval import count_tokens
+
+        short = count_tokens("hi")
+        long = count_tokens("hello world this is a longer sentence with more words")
+        assert long > short
+
+    def test_returns_int(self) -> None:
+        from core.retrieval import count_tokens
+
+        result = count_tokens("test")
+        assert isinstance(result, int)
