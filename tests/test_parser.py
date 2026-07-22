@@ -342,6 +342,21 @@ class TestDetectHotspots:
         hotspots = detect_hotspots(events)
         assert "/proj/f.py" in hotspots
 
+    def test_returns_frozenset_type(self) -> None:
+        result = detect_hotspots([])
+        assert isinstance(result, frozenset)
+
+    def test_two_files_each_at_threshold_both_hotspots(self) -> None:
+        events = [
+            _make_write_event("/proj/x.py", ts) for ts in range(HOTSPOT_WRITE_THRESHOLD)
+        ] + [
+            _make_write_event("/proj/y.py", ts + 1000)
+            for ts in range(HOTSPOT_WRITE_THRESHOLD)
+        ]
+        hotspots = detect_hotspots(events)
+        assert "/proj/x.py" in hotspots
+        assert "/proj/y.py" in hotspots
+
 
 # ---------------------------------------------------------------------------
 # detect_co_occurring_writes
