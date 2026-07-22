@@ -472,6 +472,20 @@ class TestExtractProseTurns:
     def test_empty_events_returns_empty(self) -> None:
         assert extract_prose_turns([]) == ()
 
+    def test_missing_text_key_skipped(self) -> None:
+        events = [
+            _make_event(EventType.ASSISTANT_MESSAGE, data={}),
+            _make_event(EventType.ASSISTANT_MESSAGE, data={"text": "present"}),
+        ]
+        prose = extract_prose_turns(events)
+        assert len(prose) == 1
+        assert prose[0] == "present"
+
+    def test_returns_tuple(self) -> None:
+        events = [_make_event(EventType.ASSISTANT_MESSAGE, data={"text": "hi"})]
+        prose = extract_prose_turns(events)
+        assert isinstance(prose, tuple)
+
 
 # ---------------------------------------------------------------------------
 # summarize_session
@@ -519,3 +533,31 @@ class TestSummarizeSession:
         assert len(summary.hotspot_files) >= 1
         assert len(summary.bash_failures) >= 1
         assert len(summary.co_occurring_pairs) >= 1
+
+    def test_co_occurring_pairs_is_tuple(self) -> None:
+        events = [
+            _make_write_event("/proj/a.py", timestamp=0),
+            _make_write_event("/proj/b.py", timestamp=5),
+        ]
+        summary = summarize_session(events)
+        assert isinstance(summary.co_occurring_pairs, tuple)
+
+    def test_multiple_bash_failures_all_captured(self) -> None:
+        events = [
+            _make_event(
+                EventType.BASH_FAILURE,
+                timestamp=i,
+                data={"command": f"cmd{i}", "exit_code": 1},
+            )
+            for i in range(3)
+        ]
+        summary = summarize_session(events)
+        assert len(summary.bash_failures) == 3
+
+    def test_session_id_from_first_event_not_last(self) -> None:
+        events = [
+            _make_event(EventType.SESSION_START, session_id="first"),
+            _make_event(EventType.FILE_WRITE, session_id="other", data={"path": "/x"}),
+        ]
+        summary = summarize_session(events)
+        assert summary.session_id == "first"
