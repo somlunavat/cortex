@@ -906,6 +906,31 @@ class TestTouchNodes:
         assert node is not None
         assert node.session_count == 1 + 4  # initial 1 + 4 touches
 
+    def test_weight_bump_equals_touch_weight_bump_constant(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        from core.graph import TOUCH_WEIGHT_BUMP
+
+        n_id = graph.write_node(_make_node(dummy_embedding, weight=1.0))
+        graph.touch_nodes([n_id], now=int(time.time()))
+        node = graph.get_node(n_id)
+        assert node is not None
+        assert pytest.approx(1.0 + TOUCH_WEIGHT_BUMP) == node.weight
+
+    def test_untouched_node_weight_unchanged(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        id_touched = graph.write_node(
+            _make_node(dummy_embedding, text="touched", weight=1.0)
+        )
+        id_other = graph.write_node(
+            _make_node(dummy_embedding, text="other", weight=2.0)
+        )
+        graph.touch_nodes([id_touched], now=int(time.time()))
+        other = graph.get_node(id_other)
+        assert other is not None
+        assert pytest.approx(2.0) == other.weight
+
 
 # ---------------------------------------------------------------------------
 # get_nodes_by_source
