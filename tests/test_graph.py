@@ -1161,6 +1161,37 @@ class TestGetStaleNodes:
         stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
         assert stale == []
 
+    def test_project_isolation(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        old_time = int(time.time()) - 10 * 86_400
+        id_this = graph.write_node(
+            _make_node(dummy_embedding, text="this project", tier=1)
+        )
+        id_other = graph.write_node(
+            _make_node(dummy_embedding, text="other project", tier=1, project="/other")
+        )
+        for nid in (id_this, id_other):
+            graph._conn.execute(
+                "UPDATE nodes SET last_accessed = ? WHERE id = ?", (old_time, nid)
+            )
+        graph._conn.commit()
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        assert any(n.id == id_this for n in stale)
+        assert all(n.project == TEST_PROJECT for n in stale)
+
+    def test_days_boundary_one_second_before_cutoff(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        days = 7
+        cutoff = int(time.time()) - days * 86_400
+        barely_stale = cutoff - 1
+        nid = graph.write_node(_make_node(dummy_embedding, text="boundary node"))
+        graph._conn.execute(
+            "UPDATE nodes SET last_accessed = ? WHERE id = ?", (barely_stale, nid)
+        )
+        graph._conn.commit()
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=days)
+        assert any(n.id == nid for n in stale)
+
 
 # ---------------------------------------------------------------------------
 # delete_nodes_bulk
