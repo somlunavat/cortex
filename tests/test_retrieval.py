@@ -267,6 +267,31 @@ class TestGraphChannel:
         results = graph_channel(nodes[:1], graph, nodes)
         assert len(results) == len(nodes)
 
+    def test_empty_seed_list_all_scores_zero(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        for i in range(3):
+            graph.write_node(_make_node(f"node {i}", embedding=e))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        results = graph_channel([], graph, nodes)
+        assert all(r.score == 0.0 for r in results)
+
+    def test_two_seeds_to_same_neighbor_score_is_half(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        s1_id = graph.write_node(_make_node("seed1", embedding=e))
+        s2_id = graph.write_node(_make_node("seed2", embedding=e))
+        n_id = graph.write_node(_make_node("shared neighbor", embedding=e))
+        graph.write_edge(s1_id, n_id)
+        graph.write_edge(s2_id, n_id)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        seeds = [n for n in nodes if n.id in (s1_id, s2_id)]
+        results = graph_channel(seeds, graph, nodes)
+        neighbor = next(r for r in results if r.node.id == n_id)
+        assert neighbor.score == pytest.approx(0.5, abs=1e-6)
+
 
 # ---------------------------------------------------------------------------
 # fuse_scores
