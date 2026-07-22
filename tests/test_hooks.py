@@ -555,6 +555,39 @@ class TestWriteCandidates:
         assert n == 3
         assert len(graph.get_all_nodes(project=TEST_PROJECT)) == 3
 
+    def test_write_candidates_stores_correct_source(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidate = self._make_candidate("use ruff for linting", source="nlp")
+        embedding = rng.random(384).astype(np.float32)
+        _write_candidates([candidate], [embedding], graph, 0, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert nodes[0].source == "nlp"
+
+    def test_write_candidates_stores_correct_project(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidate = self._make_candidate("use pytest fixtures")
+        embedding = rng.random(384).astype(np.float32)
+        _write_candidates([candidate], [embedding], graph, 0, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert nodes[0].project == TEST_PROJECT
+
+    def test_write_candidates_tier_always_one(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidate = self._make_candidate("always start at tier 1")
+        embedding = rng.random(384).astype(np.float32)
+        _write_candidates([candidate], [embedding], graph, 0, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert nodes[0].tier == 1
+
 
 # ---------------------------------------------------------------------------
 # _wire_co_occurring_edges
