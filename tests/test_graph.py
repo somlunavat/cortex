@@ -1274,6 +1274,43 @@ class TestGetLastSession:
         )
         assert graph.get_last_session(TEST_PROJECT) is None
 
+    def test_includes_token_fields(self, graph: Graph) -> None:
+        now = int(time.time())
+        graph.write_session(
+            session_id="tok-sess",
+            project=TEST_PROJECT,
+            started_at=now - 60,
+            ended_at=now,
+            nodes_written=3,
+            nodes_evicted=1,
+            nodes_promoted=0,
+            transcript_path="/tmp/tok.jsonl",
+            tokens_raw=800,
+            tokens_injected=300,
+        )
+        last = graph.get_last_session(TEST_PROJECT)
+        assert last is not None
+        assert last["tokens_raw"] == 800
+        assert last["tokens_injected"] == 300
+
+    def test_includes_nodes_written_and_evicted(self, graph: Graph) -> None:
+        now = int(time.time())
+        graph.write_session(
+            session_id="nw-sess",
+            project=TEST_PROJECT,
+            started_at=now - 60,
+            ended_at=now,
+            nodes_written=7,
+            nodes_evicted=2,
+            nodes_promoted=1,
+            transcript_path="",
+        )
+        last = graph.get_last_session(TEST_PROJECT)
+        assert last is not None
+        assert last["nodes_written"] == 7
+        assert last["nodes_evicted"] == 2
+        assert last["nodes_promoted"] == 1
+
 
 # ---------------------------------------------------------------------------
 # get_recent_nodes
@@ -1306,6 +1343,22 @@ class TestGetRecentNodes:
 
     def test_empty_graph_returns_empty(self, graph: Graph) -> None:
         assert graph.get_recent_nodes(TEST_PROJECT) == []
+
+    def test_default_limit_is_ten(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(15):
+            graph.write_node(_make_node(dummy_embedding, text=f"node {i}"))
+        recent = graph.get_recent_nodes(TEST_PROJECT)
+        assert len(recent) == 10
+
+    def test_scoped_to_project(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="mine", project=TEST_PROJECT))
+        graph.write_node(
+            _make_node(dummy_embedding, text="other", project="/other/proj")
+        )
+        recent = graph.get_recent_nodes(TEST_PROJECT)
+        assert all(n.project == TEST_PROJECT for n in recent)
 
 
 # ---------------------------------------------------------------------------
