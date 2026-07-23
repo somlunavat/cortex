@@ -408,6 +408,25 @@ class TestGetAllNodes:
         nodes = graph.get_all_nodes(project=TEST_PROJECT)
         assert nodes == []
 
+    def test_no_tier_filter_returns_all_tiers(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="t1", tier=1))
+        graph.write_node(_make_node(dummy_embedding, text="t2", tier=2))
+        graph.write_node(_make_node(dummy_embedding, text="t3", tier=3))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert len(nodes) == 3
+        tiers = {n.tier for n in nodes}
+        assert tiers == {1, 2, 3}
+
+    def test_returned_nodes_belong_to_project(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="n1"))
+        graph.write_node(_make_node(dummy_embedding, text="n2"))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert all(n.project == TEST_PROJECT for n in nodes)
+
 
 # ---------------------------------------------------------------------------
 # delete_node
