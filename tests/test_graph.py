@@ -2127,6 +2127,20 @@ class TestGetSessionRecords:
         records = graph.get_session_records(TEST_PROJECT)
         assert records[0]["nodes_written"] == 7
 
+    def test_records_include_started_at_field(self, graph: Graph) -> None:
+        self._write_session(graph, ended_at=7000)
+        records = graph.get_session_records(TEST_PROJECT)
+        assert "started_at" in records[0]
+        assert records[0]["started_at"] == 6940
+
+    def test_multiple_sessions_all_returned_up_to_default_limit(
+        self, graph: Graph
+    ) -> None:
+        for i in range(3):
+            self._write_session(graph, ended_at=1000 + i * 100)
+        records = graph.get_session_records(TEST_PROJECT)
+        assert len(records) == 3
+
 
 # ---------------------------------------------------------------------------
 # TestQueryNodesPageSortCols
