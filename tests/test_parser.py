@@ -443,6 +443,22 @@ class TestDetectCoOccurringWrites:
         pairs = detect_co_occurring_writes(events)
         assert len(pairs) == 0
 
+    def test_pairs_are_frozensets(self) -> None:
+        events = [
+            _make_write_event("/proj/x.py", timestamp=0),
+            _make_write_event("/proj/y.py", timestamp=1),
+        ]
+        pairs = detect_co_occurring_writes(events)
+        assert all(isinstance(p, frozenset) for p in pairs)
+
+    def test_four_files_within_window_produces_six_pairs(self) -> None:
+        events = [
+            _make_write_event(f"/proj/{c}.py", timestamp=i)
+            for i, c in enumerate("abcd")
+        ]
+        pairs = detect_co_occurring_writes(events)
+        assert len(pairs) == 6
+
 
 # ---------------------------------------------------------------------------
 # extract_prose_turns
