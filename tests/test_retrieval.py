@@ -336,6 +336,22 @@ class TestFuseScores:
         result = fuse_scores(v, b, g)
         assert result[0].score == 0.0
 
+    def test_fused_scores_are_non_negative(self, rng: np.random.Generator) -> None:
+        nodes = [_make_node(f"n{i}") for i in range(2)]
+        v = [ScoredNode(node=n, score=rng.random()) for n in nodes]
+        b = [ScoredNode(node=n, score=rng.random()) for n in nodes]
+        g = [ScoredNode(node=n, score=rng.random()) for n in nodes]
+        result = fuse_scores(v, b, g)
+        assert all(r.score >= 0.0 for r in result)
+
+    def test_single_node_fuse_returns_one_result(self) -> None:
+        node = _make_node("solo")
+        v = [ScoredNode(node=node, score=0.9)]
+        b = [ScoredNode(node=node, score=0.4)]
+        g = [ScoredNode(node=node, score=0.1)]
+        result = fuse_scores(v, b, g)
+        assert len(result) == 1
+
 
 # ---------------------------------------------------------------------------
 # retrieve
