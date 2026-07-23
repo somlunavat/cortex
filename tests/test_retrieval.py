@@ -446,6 +446,22 @@ class TestRetrieve:
         tier3_count = sum(1 for n in result if n.tier == 3)
         assert tier3_count == 5
 
+    def test_result_nodes_have_correct_project(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("a node", tier=1, embedding=e))
+        result = retrieve("query", TEST_PROJECT, graph)
+        assert all(n.project == TEST_PROJECT for n in result)
+
+    def test_tier1_node_included_when_similar(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("relevant fact", tier=1, embedding=e))
+        result = retrieve("query", TEST_PROJECT, graph)
+        assert any(n.tier == 1 for n in result)
+
 
 # ---------------------------------------------------------------------------
 # format_injection_block
