@@ -229,6 +229,16 @@ class TestCosineSimilarity:
         sim_scaled = cosine_similarity(dummy_vec * scale, other)
         assert abs(sim_orig - abs(sim_scaled)) < 1e-4
 
+    def test_similarity_is_symmetric(self, dummy_vec: np.ndarray) -> None:
+        rng = np.random.default_rng(seed=42)
+        other = rng.random(_EMBEDDING_DIM).astype(np.float32)
+        assert cosine_similarity(dummy_vec, other) == pytest.approx(
+            cosine_similarity(other, dummy_vec), abs=1e-5
+        )
+
+    def test_self_similarity_is_one(self, dummy_vec: np.ndarray) -> None:
+        assert cosine_similarity(dummy_vec, dummy_vec) == pytest.approx(1.0, abs=1e-5)
+
 
 # ---------------------------------------------------------------------------
 # Quantization helpers
