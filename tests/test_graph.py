@@ -372,6 +372,40 @@ class TestFindSimilar:
         )
         assert results == []
 
+    def test_results_are_list_of_node_objects(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding))
+        results = graph.find_similar(
+            embedding=dummy_embedding,
+            project=TEST_PROJECT,
+            threshold=0.5,
+            limit=5,
+        )
+        assert isinstance(results, list)
+        assert all(isinstance(n, Node) for n in results)
+
+    def test_higher_similarity_node_ranked_first(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        rng = np.random.default_rng(seed=77)
+        very_similar = dummy_embedding + rng.random(384).astype(np.float32) * 0.001
+        very_similar = (very_similar / np.linalg.norm(very_similar)).astype(np.float32)
+        unrelated = rng.random(384).astype(np.float32)
+        unrelated = (unrelated / np.linalg.norm(unrelated)).astype(np.float32)
+        graph.write_node(_make_node(very_similar, text="close"))
+        graph.write_node(_make_node(unrelated, text="far"))
+        results = graph.find_similar(
+            embedding=dummy_embedding,
+            project=TEST_PROJECT,
+            threshold=0.0,
+            limit=10,
+        )
+        assert len(results) >= 2
+        close_idx = next(i for i, n in enumerate(results) if n.text == "close")
+        far_idx = next(i for i, n in enumerate(results) if n.text == "far")
+        assert close_idx < far_idx
+
 
 # ---------------------------------------------------------------------------
 # get_all_nodes
