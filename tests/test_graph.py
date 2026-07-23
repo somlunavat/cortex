@@ -1452,6 +1452,23 @@ class TestGetTierCounts:
         total = sum(c for c, _ in counts.values())
         assert total == 1
 
+    def test_single_tier3_node_in_counts(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="conv", tier=3))
+        counts = graph.get_tier_counts(TEST_PROJECT)
+        assert 3 in counts
+        assert counts[3][0] == 1
+
+    def test_average_weight_reflects_written_weight(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="n1", tier=1, weight=2.0))
+        graph.write_node(_make_node(dummy_embedding, text="n2", tier=1, weight=4.0))
+        counts = graph.get_tier_counts(TEST_PROJECT)
+        assert counts[1][0] == 2
+        assert counts[1][1] == pytest.approx(3.0, abs=1e-4)
+
 
 # ---------------------------------------------------------------------------
 # get_type_counts / get_source_counts
