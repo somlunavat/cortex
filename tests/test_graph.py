@@ -623,6 +623,26 @@ class TestEdges:
         with pytest.raises(ValueError):
             graph.write_edge(node_id, node_id)
 
+    def test_edge_strength_after_three_writes(
+        self, graph: Graph, dummy_embedding: np.ndarray, alt_embedding: np.ndarray
+    ) -> None:
+        id_a = graph.write_node(_make_node(dummy_embedding, text="node a"))
+        id_b = graph.write_node(_make_node(alt_embedding, text="node b"))
+        for _ in range(3):
+            graph.write_edge(id_a, id_b)
+        edges = graph.get_edges(id_a)
+        assert edges[0].strength == pytest.approx(3.0, abs=1e-5)
+
+    def test_edge_source_id_matches_written_source(
+        self, graph: Graph, dummy_embedding: np.ndarray, alt_embedding: np.ndarray
+    ) -> None:
+        id_a = graph.write_node(_make_node(dummy_embedding, text="source node"))
+        id_b = graph.write_node(_make_node(alt_embedding, text="target node"))
+        graph.write_edge(id_a, id_b)
+        edges = graph.get_edges(id_a)
+        assert edges[0].source_id == id_a
+        assert edges[0].target_id == id_b
+
 
 # ---------------------------------------------------------------------------
 # update_weight
