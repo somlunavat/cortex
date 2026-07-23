@@ -131,6 +131,20 @@ class TestJsonlChannel:
         for c in candidates:
             assert len(c.text) <= 200
 
+    def test_hotspot_candidate_type_is_observation(self) -> None:
+        events = [_write_event(f"{TEST_PROJECT}/utils.py", ts) for ts in range(4)]
+        candidates = jsonl_channel(events, TEST_PROJECT)
+        obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
+        assert len(obs) >= 1
+        assert all(c.type == NodeType.OBSERVATION for c in obs)
+
+    def test_two_hotspot_files_produce_two_nodes(self) -> None:
+        events = [_write_event(f"{TEST_PROJECT}/a.py", ts) for ts in range(3)]
+        events += [_write_event(f"{TEST_PROJECT}/b.py", ts) for ts in range(3)]
+        candidates = jsonl_channel(events, TEST_PROJECT)
+        obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
+        assert len(obs) == 2
+
 
 # ---------------------------------------------------------------------------
 # Channel 2: ast_channel
