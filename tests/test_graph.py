@@ -434,6 +434,23 @@ class TestDeleteNode:
     def test_delete_nonexistent_is_silent(self, graph: Graph) -> None:
         graph.delete_node("nonexistent-id")
 
+    def test_deleted_node_get_node_returns_none(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        graph.delete_node(node_id)
+        assert graph.get_node(node_id) is None
+
+    def test_delete_one_of_two_leaves_other(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        id_a = graph.write_node(_make_node(dummy_embedding, text="keep"))
+        id_b = graph.write_node(_make_node(dummy_embedding, text="remove"))
+        graph.delete_node(id_b)
+        remaining = graph.get_all_nodes(project=TEST_PROJECT)
+        assert len(remaining) == 1
+        assert remaining[0].id == id_a
+
 
 # ---------------------------------------------------------------------------
 # delete_all_nodes
