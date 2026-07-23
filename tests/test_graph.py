@@ -948,6 +948,32 @@ class TestWriteSession:
         assert row["tokens_raw"] is None
         assert row["tokens_injected"] is None
 
+    def test_raises_when_ended_before_started(self, graph: Graph) -> None:
+        with pytest.raises(ValueError, match="ended_at"):
+            graph.write_session(
+                session_id="bad-id",
+                project=TEST_PROJECT,
+                started_at=2000,
+                ended_at=1000,
+                nodes_written=0,
+                nodes_evicted=0,
+                nodes_promoted=0,
+                transcript_path="/tmp/bad.jsonl",
+            )
+
+    def test_raises_when_nodes_written_negative(self, graph: Graph) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            graph.write_session(
+                session_id="neg-id",
+                project=TEST_PROJECT,
+                started_at=1000,
+                ended_at=2000,
+                nodes_written=-1,
+                nodes_evicted=0,
+                nodes_promoted=0,
+                transcript_path="/tmp/neg.jsonl",
+            )
+
 
 class TestTouchNodes:
     def test_touch_updates_last_accessed(
