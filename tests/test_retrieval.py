@@ -151,6 +151,17 @@ class TestVectorChannel:
         unr_score = next(r for r in results if r.node.text == "unrelated").score
         assert sim_score > unr_score
 
+    def test_empty_node_list_returns_empty(self, rng: np.random.Generator) -> None:
+        q = _random_embedding(rng)
+        results = vector_channel(q, [])
+        assert results == []
+
+    def test_scored_node_carries_original_node(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        node = _make_node("my node", embedding=e)
+        results = vector_channel(e, [node])
+        assert results[0].node is node
+
 
 # ---------------------------------------------------------------------------
 # bm25_channel
