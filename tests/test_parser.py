@@ -357,6 +357,27 @@ class TestDetectHotspots:
         assert "/proj/x.py" in hotspots
         assert "/proj/y.py" in hotspots
 
+    def test_returns_set_of_strings(self) -> None:
+        events = [
+            _make_write_event("/proj/file.py", ts)
+            for ts in range(HOTSPOT_WRITE_THRESHOLD)
+        ]
+        hotspots = detect_hotspots(events)
+        assert isinstance(hotspots, (set, frozenset))
+        assert all(isinstance(h, str) for h in hotspots)
+
+    def test_many_writes_same_file_still_one_hotspot_entry(self) -> None:
+        events = [
+            _make_write_event("/proj/busy.py", ts)
+            for ts in range(HOTSPOT_WRITE_THRESHOLD * 5)
+        ]
+        hotspots = detect_hotspots(events)
+        assert (
+            hotspots.count("/proj/busy.py") == 1
+            if isinstance(hotspots, list)
+            else "/proj/busy.py" in hotspots
+        )
+
 
 # ---------------------------------------------------------------------------
 # detect_co_occurring_writes
