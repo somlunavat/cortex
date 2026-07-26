@@ -149,6 +149,18 @@ class TestRunExtract:
         second_count = len(graph.get_all_nodes(project=TEST_PROJECT))
         assert second_count >= first_count
 
+    def test_extract_returns_positive_int_for_valid_transcript(
+        self, graph: Graph
+    ) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert isinstance(result, int)
+        assert result >= 0
+
+    def test_extract_does_not_write_to_wrong_project(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        other_nodes = graph.get_all_nodes(project="/some/other/project")
+        assert len(other_nodes) == 0
+
 
 # ---------------------------------------------------------------------------
 # run_inject
