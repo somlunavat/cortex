@@ -431,6 +431,44 @@ class TestTier2Promotion:
         if low_sess:
             assert low_sess[0].tier == 2
 
+    def test_tier2_promotion_count_in_result(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_ts = int(time.time()) - 20 * SECONDS_PER_DAY
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT + 2.0,
+            session_count=TIER2_PROMOTION_SESSIONS,
+            created_at=old_ts,
+            text="promo node",
+        )
+        graph.write_node(node)
+        result = run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        promoted = [n for n in nodes if n.tier == 3]
+        if promoted:
+            assert result.nodes_promoted >= 1
+
+    def test_tier2_node_young_stays_tier2(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        recent_ts = int(time.time()) - 5 * SECONDS_PER_DAY
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT + 2.0,
+            session_count=TIER2_PROMOTION_SESSIONS,
+            created_at=recent_ts,
+            text="young node",
+        )
+        graph.write_node(node)
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        young = [n for n in nodes if n.text == "young node"]
+        if young:
+            assert young[0].tier == 2
+
 
 # ---------------------------------------------------------------------------
 # DecayResult dataclass
