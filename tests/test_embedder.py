@@ -268,6 +268,15 @@ class TestQuantizationHelpers:
     def test_embedding_dim_returns_384(self) -> None:
         assert embedding_dim() == 384
 
+    def test_quantize_int8_output_dtype_is_int8(self, dummy_vec: np.ndarray) -> None:
+        result = _quantize_int8(dummy_vec)
+        assert result.dtype == np.int8
+
+    def test_dequantize_int8_output_length_matches_input(self) -> None:
+        arr = np.array([10, -20, 30, -40, 50], dtype=np.int8)
+        result = _dequantize_int8(arr)
+        assert result.shape == arr.shape
+
 
 # ---------------------------------------------------------------------------
 # Fallback paths when model unavailable (lines 34-36, 58, 72-74, 91, 101-103)
