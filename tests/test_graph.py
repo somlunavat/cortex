@@ -1867,15 +1867,14 @@ class TestQueryNodesPage:
         assert total == 0
         assert nodes == []
 
-    def test_offset_skips_first_results(
+    def test_limit_caps_returned_nodes_but_total_reflects_all(
         self, graph: Graph, dummy_embedding: np.ndarray
     ) -> None:
         for i in range(5):
             graph.write_node(_make_node(dummy_embedding, text=f"n{i}"))
-        _, _ = graph.query_nodes_page(TEST_PROJECT, limit=5)
-        nodes_offset, total = graph.query_nodes_page(TEST_PROJECT, limit=5, offset=2)
+        nodes_limited, total = graph.query_nodes_page(TEST_PROJECT, limit=3)
         assert total == 5
-        assert len(nodes_offset) == 3
+        assert len(nodes_limited) == 3
 
 
 # ---------------------------------------------------------------------------
