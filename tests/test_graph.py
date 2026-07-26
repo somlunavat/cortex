@@ -1862,6 +1862,21 @@ class TestQueryNodesPage:
         assert total == 1
         assert nodes[0].text == "a"
 
+    def test_empty_project_returns_zero_total(self, graph: Graph) -> None:
+        nodes, total = graph.query_nodes_page(TEST_PROJECT)
+        assert total == 0
+        assert nodes == []
+
+    def test_offset_skips_first_results(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(5):
+            graph.write_node(_make_node(dummy_embedding, text=f"n{i}"))
+        _, _ = graph.query_nodes_page(TEST_PROJECT, limit=5)
+        nodes_offset, total = graph.query_nodes_page(TEST_PROJECT, limit=5, offset=2)
+        assert total == 5
+        assert len(nodes_offset) == 3
+
 
 # ---------------------------------------------------------------------------
 # find_similar — validation guards (lines 266, 268)
