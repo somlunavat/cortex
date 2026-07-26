@@ -299,6 +299,18 @@ class TestExtractInjectLoop:
         if block:
             assert "END CORTEX MEMORY" in block
 
+    def test_inject_after_two_extracts_returns_string(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        run_extract(DECISIONS_TRANSCRIPT, TEST_PROJECT, graph)
+        result = run_inject(TEST_PROJECT, graph, query="")
+        assert isinstance(result, str)
+
+    def test_extract_then_inject_project_in_result(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        block = run_inject(TEST_PROJECT, graph, query="")
+        if block:
+            assert TEST_PROJECT in block
+
 
 # ---------------------------------------------------------------------------
 # open_graph helpers (via shared factory)
