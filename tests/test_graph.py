@@ -1087,6 +1087,19 @@ class TestTouchNodes:
         assert other is not None
         assert pytest.approx(2.0) == other.weight
 
+    def test_touch_sets_exact_timestamp(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        n_id = graph.write_node(_make_node(dummy_embedding))
+        future = int(time.time()) + 9999
+        graph.touch_nodes([n_id], now=future)
+        node = graph.get_node(n_id)
+        assert node is not None
+        assert node.last_accessed == future
+
+    def test_touch_unknown_id_is_silent(self, graph: Graph) -> None:
+        graph.touch_nodes(["no-such-id"], now=int(time.time()))  # must not raise
+
 
 # ---------------------------------------------------------------------------
 # get_nodes_by_source
