@@ -244,6 +244,22 @@ class TestRunInject:
         assert after is not None
         assert after.last_accessed >= before_ts
 
+    def test_inject_result_is_non_empty_when_nodes_exist(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("always use async/await", tier=3, embedding=e))
+        result = run_inject(TEST_PROJECT, graph, query="async")
+        assert len(result) > 0
+
+    def test_inject_returns_empty_for_wrong_project(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("node for other project", tier=3, embedding=e))
+        result = run_inject("/some/other/project", graph, query="")
+        assert result == ""
+
 
 # ---------------------------------------------------------------------------
 # Integration: extract → inject round-trip
