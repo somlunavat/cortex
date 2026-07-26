@@ -244,6 +244,20 @@ class TestNlpChannel:
         conventions = [c for c in candidates if c.type == NodeType.CONVENTION]
         assert all(c.durability >= 0.8 for c in conventions)
 
+    def test_multiple_decision_sentences_produce_multiple_facts(self) -> None:
+        prose = [
+            "I chose asyncpg because it has native async support.",
+            "I chose Redis because it supports pub/sub messaging.",
+        ]
+        candidates = nlp_channel(prose, TEST_PROJECT)
+        facts = [c for c in candidates if c.type == NodeType.FACT]
+        assert len(facts) >= 2
+
+    def test_candidates_have_project_set(self) -> None:
+        prose = ["I chose asyncpg over psycopg2 because of async support."]
+        candidates = nlp_channel(prose, TEST_PROJECT)
+        assert all(c.project == TEST_PROJECT for c in candidates)
+
 
 # ---------------------------------------------------------------------------
 # Helper function unit tests
