@@ -1690,6 +1690,24 @@ class TestGetRecentNodes:
         recent = graph.get_recent_nodes(TEST_PROJECT)
         assert all(n.project == TEST_PROJECT for n in recent)
 
+    def test_returns_list_of_node_objects(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        from core.graph import Node
+
+        graph.write_node(_make_node(dummy_embedding, text="n1"))
+        recent = graph.get_recent_nodes(TEST_PROJECT)
+        assert isinstance(recent, list)
+        assert all(isinstance(n, Node) for n in recent)
+
+    def test_single_node_returns_single_item(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="only"))
+        recent = graph.get_recent_nodes(TEST_PROJECT, limit=10)
+        assert len(recent) == 1
+        assert recent[0].text == "only"
+
 
 # ---------------------------------------------------------------------------
 # get_aggregate_stats
