@@ -560,6 +560,23 @@ class TestDeleteAllNodes:
         remaining = graph.get_all_nodes(other_project)
         assert len(remaining) == 1
 
+    def test_second_delete_returns_zero(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="x"))
+        graph.delete_all_nodes(TEST_PROJECT)
+        count = graph.delete_all_nodes(TEST_PROJECT)
+        assert count == 0
+
+    def test_delete_all_removes_edges_too(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        id_a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        id_b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(id_a, id_b)
+        graph.delete_all_nodes(TEST_PROJECT)
+        assert graph.get_edges(id_a) == []
+
 
 # ---------------------------------------------------------------------------
 # update_node_tier
