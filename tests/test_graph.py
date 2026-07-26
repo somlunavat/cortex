@@ -857,6 +857,27 @@ class TestGetEdgesForNodes:
         assert "nonexistent-uuid" in result
         assert result["nonexistent-uuid"] == []
 
+    def test_multiple_nodes_each_have_entry_in_result(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        ids = [
+            graph.write_node(_make_node(dummy_embedding, text=f"x{i}"))
+            for i in range(3)
+        ]
+        result = graph.get_edges_for_nodes(ids)
+        assert set(result.keys()) == set(ids)
+
+    def test_edges_for_node_with_two_outgoing(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a_id = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b_id = graph.write_node(_make_node(dummy_embedding, text="b"))
+        c_id = graph.write_node(_make_node(dummy_embedding, text="c"))
+        graph.write_edge(a_id, b_id)
+        graph.write_edge(a_id, c_id)
+        result = graph.get_edges_for_nodes([a_id])
+        assert len(result[a_id]) == 2
+
 
 # ---------------------------------------------------------------------------
 # write_session and touch_nodes
