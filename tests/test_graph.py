@@ -1384,6 +1384,25 @@ class TestGetStaleNodes:
         stale = graph.get_stale_nodes(TEST_PROJECT, days=days)
         assert any(n.id == nid for n in stale)
 
+    def test_returns_list_of_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_time = int(time.time()) - 15 * 86_400
+        nid = graph.write_node(_make_node(dummy_embedding, text="stale one", tier=1))
+        graph._conn.execute(
+            "UPDATE nodes SET last_accessed = ? WHERE id = ?", (old_time, nid)
+        )
+        graph._conn.commit()
+        from core.graph import Node
+
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        assert isinstance(stale, list)
+        assert all(isinstance(n, Node) for n in stale)
+
+    def test_empty_graph_returns_empty_list(self, graph: Graph) -> None:
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        assert stale == []
+
 
 # ---------------------------------------------------------------------------
 # delete_nodes_bulk
