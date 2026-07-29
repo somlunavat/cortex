@@ -613,3 +613,23 @@ class TestSummarizeSession:
         ]
         summary = summarize_session(events)
         assert summary.session_id == "first"
+
+    def test_hotspot_requires_threshold_writes(self) -> None:
+        events = [
+            _make_write_event("/proj/rare.py", ts)
+            for ts in range(HOTSPOT_WRITE_THRESHOLD - 1)
+        ]
+        summary = summarize_session(events)
+        assert "/proj/rare.py" not in summary.hotspot_files
+
+    def test_multiple_bash_failures_counted(self) -> None:
+        events = [
+            _make_event(
+                EventType.BASH_FAILURE,
+                timestamp=i,
+                data={"command": f"cmd{i}", "exit_code": 1},
+            )
+            for i in range(3)
+        ]
+        summary = summarize_session(events)
+        assert len(summary.bash_failures) == 3
