@@ -102,6 +102,17 @@ class TestBuildBM25Index:
         scores = index.get_scores(["asyncpg"])
         assert scores[0] > scores[1]
 
+    def test_single_node_builds_index(self) -> None:
+        nodes = [_make_node("asyncpg connection pool")]
+        index = build_bm25_index(nodes)
+        assert index is not None
+
+    def test_index_scores_length_matches_node_count(self) -> None:
+        nodes = [_make_node("asyncpg"), _make_node("jwt"), _make_node("redis")]
+        index = build_bm25_index(nodes)
+        scores = index.get_scores(["asyncpg"])
+        assert len(scores) == 3
+
 
 # ---------------------------------------------------------------------------
 # vector_channel
