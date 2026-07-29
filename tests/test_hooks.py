@@ -628,6 +628,27 @@ class TestWriteCandidates:
         nodes = graph.get_all_nodes(project=TEST_PROJECT)
         assert nodes[0].tier == 1
 
+    def test_write_candidates_returns_dict_as_second_element(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidate = self._make_candidate("convention node")
+        embedding = rng.random(384).astype(np.float32)
+        _, file_ids = _write_candidates([candidate], [embedding], graph, 0, TEST_PROJECT)
+        assert isinstance(file_ids, dict)
+
+    def test_write_candidates_text_stored_correctly(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidate = self._make_candidate("always use type hints")
+        embedding = rng.random(384).astype(np.float32)
+        _write_candidates([candidate], [embedding], graph, 0, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert nodes[0].text == "always use type hints"
+
 
 # ---------------------------------------------------------------------------
 # _wire_co_occurring_edges
