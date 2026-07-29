@@ -176,6 +176,16 @@ class TestAstChannel:
         result = ast_channel([], TEST_PROJECT)
         assert all(c.source == SourceType.AST for c in result)
 
+    def test_result_is_list(self) -> None:
+        result = ast_channel([], TEST_PROJECT)
+        assert isinstance(result, list)
+
+    def test_non_python_file_returns_empty(self, tmp_path: Path) -> None:
+        txt_file = tmp_path / "readme.txt"
+        txt_file.write_text("just some text")
+        result = ast_channel([txt_file], TEST_PROJECT)
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # Channel 4: nlp_channel (NLP — Channel 3 git is integration-only)
