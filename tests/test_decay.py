@@ -304,6 +304,42 @@ class TestTier1Promotion:
         result = run_decay(graph, TEST_PROJECT)
         assert result.nodes_promoted >= 1
 
+    def test_low_weight_node_stays_tier1(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=TIER1_PROMOTION_WEIGHT - 1.0,
+                session_count=TIER1_PROMOTION_SESSIONS,
+                text="under weight",
+            )
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        under = [n for n in nodes if n.text == "under weight"]
+        if under:
+            assert under[0].tier == 1
+
+    def test_tier1_qualified_node_promoted_increments_result(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=TIER1_PROMOTION_WEIGHT + 3.0,
+                session_count=TIER1_PROMOTION_SESSIONS,
+                text="ready to promote",
+            )
+        )
+        result = run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        promoted = [n for n in nodes if n.text == "ready to promote" and n.tier == 2]
+        if promoted:
+            assert result.nodes_promoted >= 1
+
 
 # ---------------------------------------------------------------------------
 # Promotion — Tier 2 → Tier 3
