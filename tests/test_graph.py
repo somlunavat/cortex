@@ -779,6 +779,24 @@ class TestUpdateWeight:
         assert node is not None
         assert pytest.approx(2.0) == node.weight
 
+    def test_large_positive_delta_stored_correctly(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        graph.update_weight(node_id, delta=1000.0)
+        node = graph.get_node(node_id)
+        assert node is not None
+        assert node.weight >= 1001.0
+
+    def test_weight_readable_via_get_node_after_update(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, weight=2.0))
+        graph.update_weight(node_id, delta=3.0)
+        node = graph.get_node(node_id)
+        assert node is not None
+        assert node.weight == pytest.approx(5.0, abs=1e-5)
+
 
 # ---------------------------------------------------------------------------
 # Coverage gap tests
