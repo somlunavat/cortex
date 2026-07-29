@@ -340,6 +340,18 @@ class TestOpenGraph:
         _create_graph_at(db_path)
         assert db_path.exists()
 
+    def test_create_graph_is_writable(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "writable.db"
+        graph = _create_graph_at(db_path)
+        node = _make_node("hello world")
+        node_id = graph.write_node(node)
+        assert len(node_id) == 36
+
+    def test_open_nonexistent_path_returns_none(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "sub" / "dir" / "missing.db"
+        result = _open_graph_at(db_path)
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # main() entry points
