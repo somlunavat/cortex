@@ -66,6 +66,16 @@ class TestEmbedBatch:
         assert len(result) == 1
         assert result[0].shape == (_EMBEDDING_DIM,)
 
+    def test_large_batch_length_matches_input(self) -> None:
+        texts = [f"sentence {i}" for i in range(10)]
+        result = embed_batch(texts)
+        assert len(result) == 10
+
+    def test_all_batch_vectors_are_float32(self) -> None:
+        texts = ["hello", "world", "async"]
+        result = embed_batch(texts)
+        assert all(v.dtype == np.float32 for v in result)
+
 
 class TestEmbed:
     def test_returns_384_dim_vector(self) -> None:
