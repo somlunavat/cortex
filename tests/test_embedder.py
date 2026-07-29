@@ -97,6 +97,16 @@ class TestEmbed:
         second = _get_model()
         assert first is second
 
+    def test_long_text_returns_384_dim(self) -> None:
+        long_text = ("asyncpg is a fast async database client " * 20).strip()
+        vec = embed(long_text)
+        assert vec.shape == (_EMBEDDING_DIM,)
+
+    def test_numeric_string_embeds_successfully(self) -> None:
+        vec = embed("42 100 200")
+        assert vec.shape == (_EMBEDDING_DIM,)
+        assert vec.dtype == np.float32
+
 
 # ---------------------------------------------------------------------------
 # serialize / deserialize — float32
