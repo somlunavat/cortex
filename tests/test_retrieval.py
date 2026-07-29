@@ -639,6 +639,18 @@ class TestFormatInjectionBlock:
         block = format_injection_block(nodes, TEST_PROJECT)
         assert "[RELEVANT CONTEXT" not in block
 
+    def test_block_is_string(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("some fact", tier=1, embedding=e)]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert isinstance(block, str)
+
+    def test_tier2_node_text_appears_in_block(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("working memory entry", tier=2, embedding=e)]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "working memory entry" in block
+
 
 # ---------------------------------------------------------------------------
 # Parametrized: fuse_scores weight proportions
