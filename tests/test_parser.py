@@ -538,6 +538,22 @@ class TestExtractProseTurns:
         prose = extract_prose_turns(events)
         assert isinstance(prose, tuple)
 
+    def test_multiple_texts_returned_in_order(self) -> None:
+        events = [
+            _make_event(
+                EventType.ASSISTANT_MESSAGE, timestamp=i, data={"text": f"turn {i}"}
+            )
+            for i in range(3)
+        ]
+        prose = extract_prose_turns(events)
+        assert list(prose) == ["turn 0", "turn 1", "turn 2"]
+
+    def test_single_event_returns_single_turn(self) -> None:
+        events = [_make_event(EventType.ASSISTANT_MESSAGE, data={"text": "only one"})]
+        prose = extract_prose_turns(events)
+        assert len(prose) == 1
+        assert prose[0] == "only one"
+
 
 # ---------------------------------------------------------------------------
 # summarize_session
