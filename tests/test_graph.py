@@ -145,6 +145,21 @@ class TestWriteNode:
         node_id = graph.write_node(node)
         assert node_id
 
+    def test_two_nodes_have_different_ids(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        id1 = graph.write_node(_make_node(dummy_embedding, text="node one"))
+        id2 = graph.write_node(_make_node(dummy_embedding, text="node two"))
+        assert id1 != id2
+
+    def test_get_node_returns_written_node(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, text="findable"))
+        found = graph.get_node(node_id)
+        assert found is not None
+        assert found.text == "findable"
+
 
 # ---------------------------------------------------------------------------
 # merge_node
