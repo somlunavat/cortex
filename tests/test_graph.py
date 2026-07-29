@@ -252,6 +252,26 @@ class TestMergeNode:
         rows = graph.get_all_nodes(project=TEST_PROJECT)
         assert rows[0].rationale == "new rationale"
 
+    def test_multiple_merges_accumulate_session_count(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(dummy_embedding)
+        node_id = graph.write_node(node)
+        graph.merge_node(existing_id=node_id, candidate=node)
+        graph.merge_node(existing_id=node_id, candidate=node)
+        rows = graph.get_all_nodes(project=TEST_PROJECT)
+        assert rows[0].session_count == 3
+
+    def test_merged_node_weight_greater_than_initial(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(dummy_embedding)
+        node_id = graph.write_node(node)
+        initial_weight = graph.get_all_nodes(project=TEST_PROJECT)[0].weight
+        graph.merge_node(existing_id=node_id, candidate=node)
+        merged_weight = graph.get_all_nodes(project=TEST_PROJECT)[0].weight
+        assert merged_weight > initial_weight
+
 
 # ---------------------------------------------------------------------------
 # MERGE_WEIGHT_BUMP constant and precise merge arithmetic
