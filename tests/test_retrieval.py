@@ -311,6 +311,23 @@ class TestGraphChannel:
         results = graph_channel([], graph, nodes)
         assert all(r.score == 0.0 for r in results)
 
+    def test_all_scores_non_negative(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        n1_id = graph.write_node(_make_node("seed", embedding=e))
+        n2_id = graph.write_node(_make_node("linked", embedding=e))
+        graph.write_edge(n1_id, n2_id)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        results = graph_channel(nodes[:1], graph, nodes)
+        assert all(r.score >= 0.0 for r in results)
+
+    def test_empty_node_list_returns_empty(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        results = graph_channel([], graph, [])
+        assert results == []
+
     def test_two_seeds_to_same_neighbor_score_is_half(
         self, graph: Graph, rng: np.random.Generator
     ) -> None:
