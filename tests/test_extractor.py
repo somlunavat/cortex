@@ -356,6 +356,16 @@ class TestRunExtraction:
         candidates = run_extraction(events, TEST_PROJECT)
         assert 0 <= len(candidates) <= 10
 
+    def test_all_candidates_have_project_set(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT)
+        assert all(c.project == TEST_PROJECT for c in candidates)
+
+    def test_all_candidates_have_non_empty_text(self) -> None:
+        events = list(parse_transcript(DECISIONS_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT)
+        assert all(len(c.text) > 0 for c in candidates)
+
 
 # ---------------------------------------------------------------------------
 # AST channel — with a real temporary git repo
