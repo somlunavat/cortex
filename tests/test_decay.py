@@ -494,6 +494,21 @@ class TestDecayResult:
             expected = 5.0 * (TIER1_DECAY_RATE**3)
             assert nodes[0].weight == pytest.approx(expected, abs=0.01)
 
+    def test_decay_result_project_matches_input(self) -> None:
+        result = DecayResult(
+            project=TEST_PROJECT, nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert result.project == TEST_PROJECT
+
+    def test_decay_result_eviction_count_nonzero_on_low_weight(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(dummy_embedding, tier=1, weight=TIER1_EVICTION_THRESHOLD - 0.01)
+        )
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_evicted >= 1
+
 
 # ---------------------------------------------------------------------------
 # _meets_promotion_criteria — parametrized unit tests
