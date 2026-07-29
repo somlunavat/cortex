@@ -635,7 +635,9 @@ class TestWriteCandidates:
 
         candidate = self._make_candidate("convention node")
         embedding = rng.random(384).astype(np.float32)
-        _, file_ids = _write_candidates([candidate], [embedding], graph, 0, TEST_PROJECT)
+        _, file_ids = _write_candidates(
+            [candidate], [embedding], graph, 0, TEST_PROJECT
+        )
         assert isinstance(file_ids, dict)
 
     def test_write_candidates_text_stored_correctly(
