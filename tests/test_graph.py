@@ -765,6 +765,21 @@ class TestEdges:
         assert edges[0].source_id == id_a
         assert edges[0].target_id == id_b
 
+    def test_multiple_targets_from_one_source(
+        self, graph: Graph, dummy_embedding: np.ndarray, alt_embedding: np.ndarray
+    ) -> None:
+        id_a = graph.write_node(_make_node(dummy_embedding, text="source"))
+        id_b = graph.write_node(_make_node(alt_embedding, text="target b"))
+        id_c = graph.write_node(_make_node(dummy_embedding, text="target c"))
+        graph.write_edge(id_a, id_b)
+        graph.write_edge(id_a, id_c)
+        edges = graph.get_edges(id_a)
+        assert len(edges) == 2
+
+    def test_get_edges_unknown_node_returns_empty(self, graph: Graph) -> None:
+        edges = graph.get_edges("no-such-node")
+        assert edges == []
+
 
 # ---------------------------------------------------------------------------
 # update_weight
