@@ -505,6 +505,41 @@ class TestTier2Promotion:
         if young:
             assert young[0].tier == 2
 
+    def test_promoted_node_retains_project(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_ts = int(time.time()) - 20 * SECONDS_PER_DAY
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT + 2.0,
+            session_count=TIER2_PROMOTION_SESSIONS,
+            created_at=old_ts,
+            text="project check",
+        )
+        graph.write_node(node)
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        found = [n for n in nodes if n.text == "project check"]
+        assert all(n.project == TEST_PROJECT for n in found)
+
+    def test_non_qualifying_node_weight_decays(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=3.0,
+            session_count=1,
+            text="no promote",
+        )
+        graph.write_node(node)
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        found = [n for n in nodes if n.text == "no promote"]
+        if found:
+            assert found[0].weight < 3.0
+
 
 # ---------------------------------------------------------------------------
 # DecayResult dataclass
