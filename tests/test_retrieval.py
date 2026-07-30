@@ -403,6 +403,18 @@ class TestFuseScores:
         result = fuse_scores(v, b, g)
         assert len(result) == 1
 
+    def test_result_is_a_list(self) -> None:
+        node = _make_node("test")
+        v = [ScoredNode(node=node, score=0.5)]
+        b = [ScoredNode(node=node, score=0.3)]
+        g = [ScoredNode(node=node, score=0.2)]
+        result = fuse_scores(v, b, g)
+        assert isinstance(result, list)
+
+    def test_empty_channels_return_empty_list(self) -> None:
+        result = fuse_scores([], [], [])
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # retrieve
