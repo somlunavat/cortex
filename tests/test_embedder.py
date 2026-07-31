@@ -215,6 +215,15 @@ class TestSerializeDeserializeInt2:
         blob = serialize(dummy_vec, precision_bits=2)
         assert len(blob) == _EMBEDDING_DIM
 
+    def test_int2_recovered_dtype_is_float32(self, dummy_vec: np.ndarray) -> None:
+        blob = serialize(dummy_vec, precision_bits=2)
+        recovered = deserialize(blob, precision_bits=2)
+        assert recovered.dtype == np.float32
+
+    def test_int2_blob_is_bytes(self, dummy_vec: np.ndarray) -> None:
+        blob = serialize(dummy_vec, precision_bits=2)
+        assert isinstance(blob, bytes)
+
 
 # ---------------------------------------------------------------------------
 # cosine_similarity
