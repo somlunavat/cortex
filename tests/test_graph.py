@@ -496,6 +496,22 @@ class TestGetAllNodes:
         nodes = graph.get_all_nodes(project=TEST_PROJECT)
         assert all(n.project == TEST_PROJECT for n in nodes)
 
+    def test_count_correct_for_many_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(5):
+            graph.write_node(_make_node(dummy_embedding, text=f"node-{i}"))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert len(nodes) == 5
+
+    def test_all_returned_nodes_have_non_empty_ids(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="a"))
+        graph.write_node(_make_node(dummy_embedding, text="b"))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert all(n.id for n in nodes)
+
 
 # ---------------------------------------------------------------------------
 # delete_node
