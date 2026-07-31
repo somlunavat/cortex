@@ -143,6 +143,25 @@ class TestDecayRates:
         assert after_first < 1.0
         assert after_second < after_first
 
+    def test_tier2_weight_correct_after_two_decays(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=2.0))
+        run_decay(graph, TEST_PROJECT)
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        if nodes:
+            expected = 2.0 * TIER2_DECAY_RATE * TIER2_DECAY_RATE
+            assert nodes[0].weight == pytest.approx(expected, abs=1e-3)
+
+    def test_nodes_decayed_count_excludes_tier3(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=2.0))
+        graph.write_node(_make_node(dummy_embedding, tier=3, weight=2.0, text="t3"))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed == 1
+
 
 # ---------------------------------------------------------------------------
 # Eviction
