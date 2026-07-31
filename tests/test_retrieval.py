@@ -931,3 +931,13 @@ class TestCountTokens:
 
         result = count_tokens("test")
         assert isinstance(result, int)
+
+    def test_count_tokens_non_negative(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("!!!") >= 0
+
+    def test_sentence_more_tokens_than_single_word(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("the quick brown fox") > count_tokens("the")
