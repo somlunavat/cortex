@@ -539,6 +539,22 @@ class TestDeleteNode:
         assert len(remaining) == 1
         assert remaining[0].id == id_a
 
+    def test_delete_twice_is_silent(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        graph.delete_node(node_id)
+        graph.delete_node(node_id)
+
+    def test_delete_decrements_count(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        before = len(graph.get_all_nodes(project=TEST_PROJECT))
+        graph.delete_node(node_id)
+        after = len(graph.get_all_nodes(project=TEST_PROJECT))
+        assert after == before - 1
+
 
 # ---------------------------------------------------------------------------
 # delete_all_nodes
