@@ -535,6 +535,26 @@ class TestDetectCoOccurringWrites:
         pairs = detect_co_occurring_writes(events)
         assert len(pairs) == 6
 
+    def test_result_is_tuple_type(self) -> None:
+        events = [
+            _make_write_event("/proj/a.py", timestamp=0),
+            _make_write_event("/proj/b.py", timestamp=1),
+        ]
+        result = detect_co_occurring_writes(events)
+        assert isinstance(result, tuple)
+
+    def test_pair_is_frozenset_of_two_paths(self) -> None:
+        events = [
+            _make_write_event("/proj/x.py", timestamp=0),
+            _make_write_event("/proj/y.py", timestamp=5),
+        ]
+        pairs = detect_co_occurring_writes(events)
+        assert len(pairs) == 1
+        pair = pairs[0]
+        assert isinstance(pair, frozenset)
+        assert len(pair) == 2
+        assert all(isinstance(p, str) for p in pair)
+
 
 # ---------------------------------------------------------------------------
 # extract_prose_turns
