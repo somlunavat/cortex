@@ -810,6 +810,27 @@ class TestBM25ChannelEdgeCases:
         scores = bm25_channel("xyzzy_not_found", nodes, index)
         assert all(s.score == 0.0 for s in scores)
 
+    def test_result_length_matches_node_count(self) -> None:
+        nodes = [
+            _make_node("asyncpg database"),
+            _make_node("jwt middleware"),
+            _make_node("redis cache"),
+        ]
+        index = build_bm25_index(nodes)
+        scores = bm25_channel("asyncpg", nodes, index)
+        assert len(scores) == len(nodes)
+
+    def test_matching_query_returns_positive_score(self) -> None:
+        nodes = [
+            _make_node("asyncpg connection pool"),
+            _make_node("jwt auth token"),
+            _make_node("redis pub sub"),
+        ]
+        index = build_bm25_index(nodes)
+        scores = bm25_channel("asyncpg", nodes, index)
+        asyncpg_score = next(s.score for s in scores if "asyncpg" in s.node.text)
+        assert asyncpg_score > 0.0
+
 
 # ---------------------------------------------------------------------------
 # _format_node_line
