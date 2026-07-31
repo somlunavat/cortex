@@ -411,6 +411,17 @@ class TestRunExtraction:
         candidates = run_extraction(events, TEST_PROJECT)
         assert all(len(c.text) > 0 for c in candidates)
 
+    def test_simple_fixture_returns_list(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT)
+        assert isinstance(candidates, list)
+
+    def test_source_types_are_valid(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT)
+        valid_sources = set(SourceType)
+        assert all(c.source in valid_sources for c in candidates)
+
 
 # ---------------------------------------------------------------------------
 # AST channel — with a real temporary git repo
