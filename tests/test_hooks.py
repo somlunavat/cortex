@@ -272,6 +272,26 @@ class TestRunInject:
         result = run_inject("/some/other/project", graph, query="")
         assert result == ""
 
+    def test_inject_result_starts_with_header(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("always use async", tier=3, embedding=e))
+        result = run_inject(TEST_PROJECT, graph, query="")
+        assert result.startswith("=== CORTEX MEMORY")
+
+    def test_inject_multiple_tier3_all_in_result(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("use type hints everywhere", tier=3, embedding=e))
+        graph.write_node(
+            _make_node("prefer asyncpg over psycopg2", tier=3, embedding=e)
+        )
+        result = run_inject(TEST_PROJECT, graph, query="")
+        assert "use type hints everywhere" in result
+        assert "prefer asyncpg over psycopg2" in result
+
 
 # ---------------------------------------------------------------------------
 # Integration: extract → inject round-trip
