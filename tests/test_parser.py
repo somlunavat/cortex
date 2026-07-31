@@ -88,6 +88,14 @@ class TestParseTranscriptFixtures:
         prose = [e for e in events if e.type == EventType.ASSISTANT_MESSAGE]
         assert len(prose) >= 3
 
+    def test_all_events_have_positive_timestamp(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        assert all(e.timestamp > 0 for e in events)
+
+    def test_all_events_have_session_id_set(self) -> None:
+        events = list(parse_transcript(DECISIONS_FIXTURE))
+        assert all(e.session_id for e in events)
+
 
 # ---------------------------------------------------------------------------
 # parse_transcript — event type coverage
