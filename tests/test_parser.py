@@ -592,6 +592,20 @@ class TestExtractProseTurns:
         assert len(prose) == 1
         assert prose[0] == "only one"
 
+    def test_prose_text_returned_unmodified(self) -> None:
+        text = "I chose asyncpg because it is fast."
+        events = [_make_event(EventType.ASSISTANT_MESSAGE, data={"text": text})]
+        prose = extract_prose_turns(events)
+        assert prose[0] == text
+
+    def test_all_returned_items_are_strings(self) -> None:
+        events = [
+            _make_event(EventType.ASSISTANT_MESSAGE, data={"text": "first"}),
+            _make_event(EventType.ASSISTANT_MESSAGE, data={"text": "second"}),
+        ]
+        prose = extract_prose_turns(events)
+        assert all(isinstance(t, str) for t in prose)
+
 
 # ---------------------------------------------------------------------------
 # summarize_session
