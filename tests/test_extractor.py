@@ -325,6 +325,17 @@ class TestHelpers:
         else:
             assert score < DURABILITY_THRESHOLD + 0.3
 
+    def test_is_retracted_false_for_decision_with_because(self) -> None:
+        assert not _is_retracted("I chose asyncpg because it has native async support.")
+
+    def test_split_on_conjunction_since_keyword(self) -> None:
+        conclusion, rationale = _split_on_conjunction(
+            "I picked Redis since it supports pub-sub."
+        )
+        assert conclusion
+        assert rationale is not None
+        assert "pub-sub" in rationale
+
 
 # ---------------------------------------------------------------------------
 # run_extraction — integration
