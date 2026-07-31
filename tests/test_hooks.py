@@ -857,7 +857,7 @@ class TestCompactHook:
         result = compact_inject_main()
         assert isinstance(result, int)
 
-    def test_compact_with_tier1_only_no_output(
+    def test_compact_with_tier1_only_no_conventions_section(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
@@ -875,7 +875,7 @@ class TestCompactHook:
 
         compact_inject_main()
         captured = capsys.readouterr()
-        assert "CORTEX MEMORY" not in captured.out
+        assert "CONVENTIONS" not in captured.out
 
 
 # ---------------------------------------------------------------------------
