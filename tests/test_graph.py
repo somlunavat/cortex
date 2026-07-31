@@ -1251,6 +1251,25 @@ class TestGetNodesBySource:
         result = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
         assert result == []
 
+    def test_multiple_nodes_same_source_all_returned(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(3):
+            graph.write_node(
+                _make_node(dummy_embedding, text=f"nlp node {i}", source="nlp")
+            )
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
+        assert len(result) == 3
+
+    def test_ast_source_queryable(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="ast fact", source="ast"))
+        graph.write_node(_make_node(dummy_embedding, text="nlp fact", source="nlp"))
+        ast_nodes = graph.get_nodes_by_source(TEST_PROJECT, source="ast")
+        assert len(ast_nodes) == 1
+        assert ast_nodes[0].text == "ast fact"
+
 
 # ---------------------------------------------------------------------------
 # update_node_rationale
