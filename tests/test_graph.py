@@ -314,6 +314,25 @@ class TestMergeWeightBump:
 
         assert pytest.approx(0.1) == TOUCH_WEIGHT_BUMP
 
+    def test_merge_weight_bump_is_positive(self) -> None:
+        from core.graph import MERGE_WEIGHT_BUMP
+
+        assert MERGE_WEIGHT_BUMP > 0
+
+    def test_triple_merge_accumulates_three_bumps(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        from core.graph import MERGE_WEIGHT_BUMP
+
+        node = _make_node(dummy_embedding, weight=1.0)
+        nid = graph.write_node(node)
+        graph.merge_node(existing_id=nid, candidate=node)
+        graph.merge_node(existing_id=nid, candidate=node)
+        graph.merge_node(existing_id=nid, candidate=node)
+        updated = graph.get_node(nid)
+        assert updated is not None
+        assert updated.weight == pytest.approx(1.0 + 3 * MERGE_WEIGHT_BUMP, abs=1e-5)
+
 
 # ---------------------------------------------------------------------------
 # find_similar
