@@ -541,6 +541,19 @@ class TestRetrieve:
         result = retrieve("query", TEST_PROJECT, graph)
         assert any(n.tier == 1 for n in result)
 
+    def test_returns_list_type(self, graph: Graph) -> None:
+        result = retrieve("query", TEST_PROJECT, graph)
+        assert isinstance(result, list)
+
+    def test_node_text_in_result_texts(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("unique fact about asyncpg", tier=1, embedding=e))
+        result = retrieve("query", TEST_PROJECT, graph)
+        texts = [n.text for n in result]
+        assert any("unique fact about asyncpg" in t for t in texts)
+
 
 # ---------------------------------------------------------------------------
 # format_injection_block
