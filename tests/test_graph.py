@@ -441,6 +441,29 @@ class TestFindSimilar:
         far_idx = next(i for i, n in enumerate(results) if n.text == "far")
         assert close_idx < far_idx
 
+    def test_result_nodes_belong_to_project(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="owned"))
+        results = graph.find_similar(
+            embedding=dummy_embedding,
+            project=TEST_PROJECT,
+            threshold=0.5,
+            limit=5,
+        )
+        assert all(n.project == TEST_PROJECT for n in results)
+
+    def test_find_similar_returns_list(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        results = graph.find_similar(
+            embedding=dummy_embedding,
+            project=TEST_PROJECT,
+            threshold=0.5,
+            limit=5,
+        )
+        assert isinstance(results, list)
+
 
 # ---------------------------------------------------------------------------
 # get_all_nodes
