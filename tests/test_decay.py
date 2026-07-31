@@ -226,6 +226,23 @@ class TestEviction:
         tier2_nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
         assert len(tier2_nodes) == 1
 
+    def test_two_low_weight_tier1_nodes_both_evicted(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=0.2, text="a"))
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=0.2, text="b"))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
+        assert len(nodes) == 0
+
+    def test_tier2_safely_above_threshold_survives(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=2.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        assert len(nodes) == 1
+
 
 # ---------------------------------------------------------------------------
 # Promotion — Tier 1 → Tier 2
