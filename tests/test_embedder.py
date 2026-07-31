@@ -278,6 +278,17 @@ class TestCosineSimilarity:
     def test_self_similarity_is_one(self, dummy_vec: np.ndarray) -> None:
         assert cosine_similarity(dummy_vec, dummy_vec) == pytest.approx(1.0, abs=1e-5)
 
+    def test_similarity_returns_float(self, dummy_vec: np.ndarray) -> None:
+        result = cosine_similarity(dummy_vec, dummy_vec)
+        assert isinstance(result, float)
+
+    def test_opposite_sign_vectors_negative_similarity(
+        self, dummy_vec: np.ndarray
+    ) -> None:
+        neg = -dummy_vec
+        result = cosine_similarity(dummy_vec, neg)
+        assert result < 0
+
 
 # ---------------------------------------------------------------------------
 # Quantization helpers
