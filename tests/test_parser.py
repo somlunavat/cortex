@@ -286,6 +286,36 @@ class TestDataNormalization:
         events = list(parse_transcript(p))
         assert events[0].data["tool_input"]["file_path"].startswith("/")
 
+    def test_event_session_id_preserved(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [
+                {
+                    "type": "file_write",
+                    "timestamp": 1,
+                    "session_id": "my-session-abc",
+                    "data": {"path": "/some/path.py"},
+                }
+            ],
+        )
+        events = list(parse_transcript(p))
+        assert events[0].session_id == "my-session-abc"
+
+    def test_bash_failure_event_type_correct(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [
+                {
+                    "type": "bash_failure",
+                    "timestamp": 5,
+                    "session_id": "s2",
+                    "data": {"command": "pytest", "exit_code": 1, "output": "err"},
+                }
+            ],
+        )
+        events = list(parse_transcript(p))
+        assert events[0].type == EventType.BASH_FAILURE
+
 
 # ---------------------------------------------------------------------------
 # detect_hotspots
