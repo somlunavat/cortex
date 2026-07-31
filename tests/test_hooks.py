@@ -877,6 +877,37 @@ class TestCompactHook:
         assert result == 0
         assert "CORTEX MEMORY" in captured.out
 
+    def test_compact_returns_int(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", TEST_PROJECT)
+        monkeypatch.setenv("CORTEX_DB_PATH", str(tmp_path / "nope.db"))
+        monkeypatch.delenv("CLAUDE_INITIAL_MESSAGE", raising=False)
+        from hooks.compact import inject_main as compact_inject_main
+
+        result = compact_inject_main()
+        assert isinstance(result, int)
+
+    def test_compact_with_tier1_only_no_conventions_section(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        rng: np.random.Generator,
+    ) -> None:
+        db_path = tmp_path / "cortex2.db"
+        g = _create_graph_at(db_path)
+        e = rng.random(384).astype(np.float32)
+        g.write_node(_make_node("tier1 observation", tier=1, embedding=e))
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", TEST_PROJECT)
+        monkeypatch.setenv("CORTEX_DB_PATH", str(db_path))
+        monkeypatch.delenv("CLAUDE_INITIAL_MESSAGE", raising=False)
+        from hooks.compact import inject_main as compact_inject_main
+
+        compact_inject_main()
+        captured = capsys.readouterr()
+        assert "CONVENTIONS" not in captured.out
+
 
 # ---------------------------------------------------------------------------
 # cli/config.py — cortex_dir, sessions_dir, db_path override, _apply_migrations
