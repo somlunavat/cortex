@@ -788,6 +788,37 @@ class TestWireCoOccurringEdges:
         assert len(edges_a) == 1
         assert len(edges_b) == 1
 
+    def test_wire_three_files_triangle(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "a.py", "b.py", "c.py")
+        co_pairs: tuple[frozenset[str], ...] = (
+            frozenset({f"{TEST_PROJECT}/a.py", f"{TEST_PROJECT}/b.py"}),
+            frozenset({f"{TEST_PROJECT}/b.py", f"{TEST_PROJECT}/c.py"}),
+            frozenset({f"{TEST_PROJECT}/a.py", f"{TEST_PROJECT}/c.py"}),
+        )
+        _wire_co_occurring_edges(co_pairs, file_ids, TEST_PROJECT, graph)
+        id_a = file_ids.get("a.py")
+        assert id_a
+        edges_a = graph.get_edges(id_a)
+        assert len(edges_a) == 2
+
+    def test_wire_only_prefixed_paths_matched(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "main.py")
+        co_pairs: tuple[frozenset[str], ...] = (
+            frozenset({"other_project/main.py", f"{TEST_PROJECT}/main.py"}),
+        )
+        _wire_co_occurring_edges(co_pairs, file_ids, TEST_PROJECT, graph)
+        id_main = file_ids.get("main.py")
+        assert id_main
+        assert graph.get_edges(id_main) == []
+
 
 # ---------------------------------------------------------------------------
 # compact.py (PostCompact hook)
