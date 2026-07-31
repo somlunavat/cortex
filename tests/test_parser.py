@@ -416,6 +416,23 @@ class TestDetectHotspots:
             else "/proj/busy.py" in hotspots
         )
 
+    def test_different_files_counted_separately(self) -> None:
+        events = [
+            _make_write_event("/proj/a.py", ts) for ts in range(HOTSPOT_WRITE_THRESHOLD)
+        ] + [
+            _make_write_event("/proj/b.py", ts + 1000)
+            for ts in range(HOTSPOT_WRITE_THRESHOLD - 1)
+        ]
+        hotspots = detect_hotspots(events)
+        assert "/proj/a.py" in hotspots
+        assert "/proj/b.py" not in hotspots
+
+    def test_writes_at_varied_timestamps_still_counted(self) -> None:
+        timestamps = [0, 500, 1000, 5000, 10000]
+        events = [_make_write_event("/proj/main.py", ts) for ts in timestamps]
+        hotspots = detect_hotspots(events)
+        assert "/proj/main.py" in hotspots
+
 
 # ---------------------------------------------------------------------------
 # detect_co_occurring_writes
