@@ -316,6 +316,15 @@ class TestQuantizationHelpers:
         result = _dequantize_int8(arr)
         assert result.shape == arr.shape
 
+    def test_quantize_int2_output_dtype_is_int8(self, dummy_vec: np.ndarray) -> None:
+        result = _quantize_int2(dummy_vec)
+        assert result.dtype == np.int8
+
+    def test_dequantize_int8_zero_input_gives_zero(self) -> None:
+        arr = np.zeros(8, dtype=np.int8)
+        result = _dequantize_int8(arr)
+        assert np.all(result == 0.0)
+
 
 # ---------------------------------------------------------------------------
 # Fallback paths when model unavailable (lines 34-36, 58, 72-74, 91, 101-103)
