@@ -331,6 +331,22 @@ class TestExtractInjectLoop:
         if block:
             assert TEST_PROJECT in block
 
+    def test_loop_produces_non_empty_block_when_extract_succeeds(
+        self, graph: Graph
+    ) -> None:
+        count = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        if count > 0:
+            block = run_inject(TEST_PROJECT, graph, query="")
+            assert len(block) > 0
+
+    def test_loop_inject_after_extract_has_cortex_memory_header(
+        self, graph: Graph
+    ) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        block = run_inject(TEST_PROJECT, graph, query="")
+        if block:
+            assert block.startswith("=== CORTEX MEMORY")
+
 
 # ---------------------------------------------------------------------------
 # open_graph helpers (via shared factory)
