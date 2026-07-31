@@ -724,6 +724,20 @@ class TestFormatInjectionBlock:
         block = format_injection_block(nodes, TEST_PROJECT)
         assert "working memory entry" in block
 
+    def test_result_is_non_empty_string(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("something", tier=1, embedding=e)]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert isinstance(block, str) and len(block) > 0
+
+    def test_tier2_node_in_relevant_context_section(
+        self, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("tier2 detail", tier=2, embedding=e)]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "[RELEVANT CONTEXT" in block
+
 
 # ---------------------------------------------------------------------------
 # Parametrized: fuse_scores weight proportions
