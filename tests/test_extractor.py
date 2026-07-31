@@ -145,6 +145,21 @@ class TestJsonlChannel:
         obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
         assert len(obs) == 2
 
+    def test_hotspot_candidate_has_non_empty_text(self) -> None:
+        events = [_write_event(f"{TEST_PROJECT}/core.py", ts) for ts in range(3)]
+        candidates = jsonl_channel(events, TEST_PROJECT)
+        obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
+        assert all(len(c.text) > 0 for c in obs)
+
+    def test_error_candidate_is_error_type(self) -> None:
+        events = [
+            _failure_event(command="pytest", exit_code=1, output="AssertionError")
+        ]
+        candidates = jsonl_channel(events, TEST_PROJECT)
+        errors = [c for c in candidates if c.type == NodeType.ERROR]
+        assert len(errors) >= 1
+        assert all(c.type == NodeType.ERROR for c in errors)
+
 
 # ---------------------------------------------------------------------------
 # Channel 2: ast_channel
