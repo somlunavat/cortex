@@ -146,6 +146,16 @@ class TestSerializeDeserializeFloat32:
         with pytest.raises(ValueError, match="Unsupported precision_bits"):
             deserialize(blob, precision_bits=16)
 
+    def test_float32_recovered_dtype_is_float32(self, dummy_vec: np.ndarray) -> None:
+        blob = serialize(dummy_vec, precision_bits=32)
+        recovered = deserialize(blob, precision_bits=32)
+        assert recovered.dtype == np.float32
+
+    def test_float32_recovered_shape_matches_dim(self, dummy_vec: np.ndarray) -> None:
+        blob = serialize(dummy_vec, precision_bits=32)
+        recovered = deserialize(blob, precision_bits=32)
+        assert recovered.shape == (_EMBEDDING_DIM,)
+
 
 # ---------------------------------------------------------------------------
 # serialize / deserialize — int8
