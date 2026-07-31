@@ -704,3 +704,17 @@ class TestSummarizeSession:
         ]
         summary = summarize_session(events)
         assert len(summary.bash_failures) == 3
+
+    def test_summary_prose_turns_from_assistant_messages(self) -> None:
+        events = [
+            _make_event(EventType.ASSISTANT_MESSAGE, data={"text": "chose redis"}),
+            _make_event(EventType.ASSISTANT_MESSAGE, data={"text": "because speed"}),
+        ]
+        summary = summarize_session(events)
+        assert "chose redis" in summary.prose_turns
+        assert "because speed" in summary.prose_turns
+
+    def test_co_occurring_pairs_nonempty_from_fixture(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        summary = summarize_session(events)
+        assert len(summary.co_occurring_pairs) >= 1
