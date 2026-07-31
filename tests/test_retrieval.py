@@ -343,6 +343,26 @@ class TestGraphChannel:
         neighbor = next(r for r in results if r.node.id == n_id)
         assert neighbor.score == pytest.approx(0.5, abs=1e-6)
 
+    def test_result_is_list(self, graph: Graph, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("a node", embedding=e))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        results = graph_channel([], graph, nodes)
+        assert isinstance(results, list)
+
+    def test_scored_node_carries_original_node(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        n1_id = graph.write_node(_make_node("seed", embedding=e))
+        n2_id = graph.write_node(_make_node("neighbour", embedding=e))
+        graph.write_edge(n1_id, n2_id)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        seeds = [n for n in nodes if n.id == n1_id]
+        results = graph_channel(seeds, graph, nodes)
+        for scored in results:
+            assert scored.node in nodes
+
 
 # ---------------------------------------------------------------------------
 # fuse_scores
