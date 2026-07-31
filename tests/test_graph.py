@@ -680,6 +680,40 @@ class TestUpdateNodeTier:
             now=int(time.time()),
         )
 
+    def test_node_still_retrievable_after_tier_update(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        import time
+
+        node_id = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(
+            node_id,
+            new_tier=3,
+            new_precision=2,
+            embedding_blob=None,
+            now=int(time.time()),
+        )
+        node = graph.get_node(node_id)
+        assert node is not None
+        assert node.tier == 3
+
+    def test_update_tier3_stores_correctly(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        import time
+
+        node_id = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(
+            node_id,
+            new_tier=3,
+            new_precision=2,
+            embedding_blob=None,
+            now=int(time.time()),
+        )
+        node = graph.get_node(node_id)
+        assert node is not None
+        assert node.precision_bits == 2
+
 
 # ---------------------------------------------------------------------------
 # write_edge / get_edges
