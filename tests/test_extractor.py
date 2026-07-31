@@ -268,6 +268,15 @@ class TestNlpChannel:
         candidates = nlp_channel(prose, TEST_PROJECT)
         assert all(c.project == TEST_PROJECT for c in candidates)
 
+    def test_all_candidates_have_non_empty_text(self) -> None:
+        prose = ["I selected JWT with RS256 signing for the auth layer."]
+        candidates = nlp_channel(prose, TEST_PROJECT)
+        assert all(len(c.text) > 0 for c in candidates)
+
+    def test_result_is_a_list(self) -> None:
+        result = nlp_channel([], TEST_PROJECT)
+        assert isinstance(result, list)
+
 
 # ---------------------------------------------------------------------------
 # Helper function unit tests
