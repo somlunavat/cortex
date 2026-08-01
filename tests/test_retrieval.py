@@ -248,6 +248,20 @@ class TestBM25Channel:
         results = bm25_channel("asyncpg", nodes, index)
         assert all(isinstance(r.score, float) for r in results)
 
+    def test_result_is_list(self) -> None:
+        nodes = [_make_node("asyncpg pool")]
+        index = build_bm25_index(nodes)
+        results = bm25_channel("asyncpg", nodes, index)
+        assert isinstance(results, list)
+
+    def test_scored_node_text_matches_original(self) -> None:
+        nodes = [_make_node("asyncpg pool"), _make_node("jwt auth")]
+        index = build_bm25_index(nodes)
+        results = bm25_channel("asyncpg", nodes, index)
+        result_texts = {r.node.text for r in results}
+        assert "asyncpg pool" in result_texts
+        assert "jwt auth" in result_texts
+
 
 # ---------------------------------------------------------------------------
 # graph_channel
