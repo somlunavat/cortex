@@ -173,6 +173,22 @@ class TestVectorChannel:
         results = vector_channel(e, [node])
         assert results[0].node is node
 
+    def test_result_is_list(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("a", embedding=e)]
+        q = _random_embedding(rng)
+        results = vector_channel(q, nodes)
+        assert isinstance(results, list)
+
+    def test_two_identical_embedding_nodes_same_score(
+        self, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        q = _random_embedding(rng)
+        nodes = [_make_node("first", embedding=e), _make_node("second", embedding=e)]
+        results = vector_channel(q, nodes)
+        assert results[0].score == pytest.approx(results[1].score, abs=1e-5)
+
 
 # ---------------------------------------------------------------------------
 # bm25_channel
