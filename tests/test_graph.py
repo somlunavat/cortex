@@ -160,6 +160,23 @@ class TestWriteNode:
         assert found is not None
         assert found.text == "findable"
 
+    def test_write_node_tier_stored_correctly(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, tier=2))
+        found = graph.get_node(node_id)
+        assert found is not None
+        assert found.tier == 2
+
+    def test_write_node_text_stored_correctly(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        text = "unique text for storage test"
+        node_id = graph.write_node(_make_node(dummy_embedding, text=text))
+        found = graph.get_node(node_id)
+        assert found is not None
+        assert found.text == text
+
 
 # ---------------------------------------------------------------------------
 # merge_node
