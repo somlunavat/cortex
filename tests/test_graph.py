@@ -500,6 +500,31 @@ class TestFindSimilar:
         )
         assert isinstance(results, list)
 
+    def test_find_similar_with_zero_threshold_returns_all(
+        self, graph: Graph, dummy_embedding: np.ndarray, alt_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="close"))
+        graph.write_node(_make_node(alt_embedding, text="far"))
+        results = graph.find_similar(
+            embedding=dummy_embedding,
+            project=TEST_PROJECT,
+            threshold=0.0,
+            limit=10,
+        )
+        assert len(results) == 2
+
+    def test_find_similar_result_nodes_have_text(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="searchable node"))
+        results = graph.find_similar(
+            embedding=dummy_embedding,
+            project=TEST_PROJECT,
+            threshold=0.5,
+            limit=5,
+        )
+        assert all(len(n.text) > 0 for n in results)
+
 
 # ---------------------------------------------------------------------------
 # get_all_nodes
