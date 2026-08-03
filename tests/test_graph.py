@@ -741,6 +741,21 @@ class TestDeleteAllNodes:
         graph.delete_all_nodes(TEST_PROJECT)
         assert graph.get_edges(id_a) == []
 
+    def test_delete_all_tier2_node_is_cleared(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="tier2 node", tier=2))
+        graph.delete_all_nodes(TEST_PROJECT)
+        assert graph.get_all_nodes(TEST_PROJECT) == []
+
+    def test_delete_all_five_nodes_returns_five(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(5):
+            graph.write_node(_make_node(dummy_embedding, text=f"node {i}"))
+        count = graph.delete_all_nodes(TEST_PROJECT)
+        assert count == 5
+
 
 # ---------------------------------------------------------------------------
 # update_node_tier
