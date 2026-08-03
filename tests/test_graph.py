@@ -2193,6 +2193,19 @@ class TestQueryNodesPage:
         assert total == 5
         assert len(nodes_limited) == 3
 
+    def test_returns_two_element_tuple(self, graph: Graph) -> None:
+        result = graph.query_nodes_page(TEST_PROJECT)
+        assert len(result) == 2
+
+    def test_source_filter_selects_matching_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="nlp node", source="nlp"))
+        graph.write_node(_make_node(dummy_embedding, text="jsonl node", source="jsonl"))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT, source="nlp")
+        assert total == 1
+        assert nodes[0].source == "nlp"
+
 
 # ---------------------------------------------------------------------------
 # find_similar — validation guards (lines 266, 268)
