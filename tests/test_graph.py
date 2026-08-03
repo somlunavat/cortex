@@ -1687,6 +1687,36 @@ class TestGetStaleNodes:
         stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
         assert stale == []
 
+    def test_stale_node_text_is_non_empty(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_time = int(time.time()) - 10 * 86_400
+        nid = graph.write_node(_make_node(dummy_embedding, text="stale text here"))
+        graph._conn.execute(
+            "UPDATE nodes SET last_accessed = ? WHERE id = ?", (old_time, nid)
+        )
+        graph._conn.commit()
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        assert all(n.text != "" for n in stale)
+
+    def test_two_stale_nodes_both_included(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        old_time = int(time.time()) - 10 * 86_400
+        ids = []
+        for i in range(2):
+            nid = graph.write_node(
+                _make_node(dummy_embedding, text=f"stale {i}", tier=1)
+            )
+            ids.append(nid)
+            graph._conn.execute(
+                "UPDATE nodes SET last_accessed = ? WHERE id = ?", (old_time, nid)
+            )
+        graph._conn.commit()
+        stale = graph.get_stale_nodes(TEST_PROJECT, days=7)
+        stale_ids = {n.id for n in stale}
+        assert all(nid in stale_ids for nid in ids)
+
 
 # ---------------------------------------------------------------------------
 # delete_nodes_bulk
