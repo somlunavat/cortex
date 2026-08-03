@@ -202,6 +202,18 @@ class TestSerializeDeserializeInt8:
         approx_sim = cosine_similarity(recovered, other_vec)
         assert abs(original_sim - approx_sim) < 0.15
 
+    def test_int8_deserialized_length_matches_input(
+        self, dummy_vec: np.ndarray
+    ) -> None:
+        blob = serialize(dummy_vec, precision_bits=8)
+        recovered = deserialize(blob, precision_bits=8)
+        assert len(recovered) == len(dummy_vec)
+
+    def test_int8_deserialized_is_float32(self, dummy_vec: np.ndarray) -> None:
+        blob = serialize(dummy_vec, precision_bits=8)
+        recovered = deserialize(blob, precision_bits=8)
+        assert recovered.dtype == np.float32
+
 
 # ---------------------------------------------------------------------------
 # serialize / deserialize — int2
