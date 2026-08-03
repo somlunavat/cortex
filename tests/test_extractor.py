@@ -360,6 +360,17 @@ class TestHelpers:
         assert rationale is not None
         assert "pub-sub" in rationale
 
+    def test_is_retracted_false_for_empty_string(self) -> None:
+        assert not _is_retracted("")
+
+    def test_split_on_conjunction_so_keyword(self) -> None:
+        conclusion, rationale = _split_on_conjunction(
+            "We use asyncpg so database calls are non-blocking."
+        )
+        assert conclusion
+        assert rationale is not None
+        assert "non-blocking" in rationale
+
 
 # ---------------------------------------------------------------------------
 # run_extraction — integration
