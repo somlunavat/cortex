@@ -596,6 +596,19 @@ class TestGetAllNodes:
         nodes = graph.get_all_nodes(project=TEST_PROJECT)
         assert all(n.id for n in nodes)
 
+    def test_get_all_nodes_returns_list_type(self, graph: Graph) -> None:
+        result = graph.get_all_nodes(project=TEST_PROJECT)
+        assert isinstance(result, list)
+
+    def test_get_all_nodes_tier2_filter_works(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, text="t1"))
+        graph.write_node(_make_node(dummy_embedding, tier=2, text="t2"))
+        tier2_nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        assert len(tier2_nodes) == 1
+        assert tier2_nodes[0].tier == 2
+
 
 # ---------------------------------------------------------------------------
 # delete_node
