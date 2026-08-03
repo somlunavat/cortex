@@ -752,3 +752,15 @@ class TestSummarizeSession:
         events = list(parse_transcript(SIMPLE_FIXTURE))
         summary = summarize_session(events)
         assert len(summary.co_occurring_pairs) >= 1
+
+    def test_summary_hotspot_files_is_frozenset(self) -> None:
+        events = [
+            _make_write_event("/proj/x.py", ts) for ts in range(HOTSPOT_WRITE_THRESHOLD)
+        ]
+        summary = summarize_session(events)
+        assert isinstance(summary.hotspot_files, frozenset)
+
+    def test_summary_session_id_is_str(self) -> None:
+        events = [_make_event(EventType.SESSION_START, session_id="sess-abc")]
+        summary = summarize_session(events)
+        assert isinstance(summary.session_id, str)
