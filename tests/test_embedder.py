@@ -156,6 +156,15 @@ class TestSerializeDeserializeFloat32:
         recovered = deserialize(blob, precision_bits=32)
         assert recovered.shape == (_EMBEDDING_DIM,)
 
+    def test_float32_blob_not_empty(self, dummy_vec: np.ndarray) -> None:
+        blob = serialize(dummy_vec, precision_bits=32)
+        assert len(blob) > 0
+
+    def test_float32_round_trip_length_matches(self, dummy_vec: np.ndarray) -> None:
+        blob = serialize(dummy_vec, precision_bits=32)
+        recovered = deserialize(blob, precision_bits=32)
+        assert len(recovered) == len(dummy_vec)
+
 
 # ---------------------------------------------------------------------------
 # serialize / deserialize — int8
