@@ -630,6 +630,25 @@ class TestDeleteNode:
         after = len(graph.get_all_nodes(project=TEST_PROJECT))
         assert after == before - 1
 
+    def test_delete_node_from_get_all_confirms_absent(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, text="to delete"))
+        graph.delete_node(nid)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert all(n.id != nid for n in nodes)
+
+    def test_delete_node_leaves_other_project_unaffected(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, project=TEST_PROJECT))
+        graph.write_node(
+            _make_node(dummy_embedding, project="/other/proj", text="other")
+        )
+        graph.delete_node(nid)
+        other_nodes = graph.get_all_nodes(project="/other/proj")
+        assert len(other_nodes) == 1
+
 
 # ---------------------------------------------------------------------------
 # delete_all_nodes
