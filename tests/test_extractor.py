@@ -292,6 +292,17 @@ class TestNlpChannel:
         result = nlp_channel([], TEST_PROJECT)
         assert isinstance(result, list)
 
+    def test_convention_candidate_source_is_nlp(self) -> None:
+        prose = ["We always use black for formatting."]
+        candidates = nlp_channel(prose, TEST_PROJECT)
+        assert all(str(c.source) == "nlp" for c in candidates)
+
+    def test_nlp_fact_candidate_text_is_non_empty(self) -> None:
+        prose = ["I decided to use asyncpg for database access."]
+        candidates = nlp_channel(prose, TEST_PROJECT)
+        if candidates:
+            assert all(len(c.text) > 0 for c in candidates)
+
 
 # ---------------------------------------------------------------------------
 # Helper function unit tests
