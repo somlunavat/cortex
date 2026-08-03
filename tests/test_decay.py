@@ -262,6 +262,20 @@ class TestEviction:
         nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
         assert len(nodes) == 1
 
+    def test_eviction_result_project_matches(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=0.1))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.project == TEST_PROJECT
+
+    def test_eviction_count_is_nonnegative(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=2.0))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_evicted >= 0
+
 
 # ---------------------------------------------------------------------------
 # Promotion — Tier 1 → Tier 2
