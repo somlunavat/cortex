@@ -1853,6 +1853,17 @@ class TestGetTierCounts:
         assert counts[1][0] == 2
         assert counts[1][1] == pytest.approx(3.0, abs=1e-4)
 
+    def test_tier_counts_result_is_dict(self, graph: Graph) -> None:
+        result = graph.get_tier_counts(TEST_PROJECT)
+        assert isinstance(result, dict)
+
+    def test_tier1_only_not_in_tier2_key(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="only tier1", tier=1))
+        counts = graph.get_tier_counts(TEST_PROJECT)
+        assert 2 not in counts
+
 
 # ---------------------------------------------------------------------------
 # get_type_counts / get_source_counts
