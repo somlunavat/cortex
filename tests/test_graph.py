@@ -2598,6 +2598,16 @@ class TestGetSessionRecords:
         records = graph.get_session_records(TEST_PROJECT)
         assert len(records) == 3
 
+    def test_session_records_result_is_list(self, graph: Graph) -> None:
+        records = graph.get_session_records(TEST_PROJECT)
+        assert isinstance(records, list)
+
+    def test_session_record_has_ended_at_field(self, graph: Graph) -> None:
+        self._write_session(graph, ended_at=9000)
+        records = graph.get_session_records(TEST_PROJECT)
+        assert "ended_at" in records[0]
+        assert records[0]["ended_at"] == 9000
+
 
 # ---------------------------------------------------------------------------
 # TestQueryNodesPageSortCols
