@@ -699,6 +699,29 @@ class TestWriteCandidates:
         nodes = graph.get_all_nodes(project=TEST_PROJECT)
         assert nodes[0].text == "always use type hints"
 
+    def test_write_candidates_first_return_is_int(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidate = self._make_candidate("prefer type hints everywhere")
+        embedding = rng.random(384).astype(np.float32)
+        n, _ = _write_candidates([candidate], [embedding], graph, 0, TEST_PROJECT)
+        assert isinstance(n, int)
+
+    def test_write_candidates_two_unique_returns_two(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _write_candidates
+
+        candidates = [
+            self._make_candidate("use asyncpg for database"),
+            self._make_candidate("always add type hints"),
+        ]
+        embeddings = [rng.random(384).astype(np.float32) for _ in candidates]
+        n, _ = _write_candidates(candidates, embeddings, graph, 0, TEST_PROJECT)
+        assert n == 2
+
 
 # ---------------------------------------------------------------------------
 # _wire_co_occurring_edges
