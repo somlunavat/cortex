@@ -465,6 +465,22 @@ class TestFuseScores:
         result = fuse_scores([], [], [])
         assert result == []
 
+    def test_fuse_output_count_matches_input_nodes(self) -> None:
+        nodes = [_make_node(f"node {i}") for i in range(4)]
+        v = [ScoredNode(node=n, score=0.5) for n in nodes]
+        b = [ScoredNode(node=n, score=0.3) for n in nodes]
+        g = [ScoredNode(node=n, score=0.2) for n in nodes]
+        result = fuse_scores(v, b, g)
+        assert len(result) == 4
+
+    def test_fuse_result_items_are_scored_nodes(self) -> None:
+        node = _make_node("solo")
+        v = [ScoredNode(node=node, score=0.8)]
+        b = [ScoredNode(node=node, score=0.4)]
+        g = [ScoredNode(node=node, score=0.1)]
+        result = fuse_scores(v, b, g)
+        assert all(isinstance(r, ScoredNode) for r in result)
+
 
 # ---------------------------------------------------------------------------
 # retrieve
