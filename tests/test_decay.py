@@ -162,6 +162,22 @@ class TestDecayRates:
         result = run_decay(graph, TEST_PROJECT)
         assert result.nodes_decayed == 1
 
+    def test_tier1_node_weight_lower_after_decay(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=5.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
+        if nodes:
+            assert nodes[0].weight < 5.0
+
+    def test_decay_result_is_decay_result_instance(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1))
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result, DecayResult)
+
 
 # ---------------------------------------------------------------------------
 # Eviction
