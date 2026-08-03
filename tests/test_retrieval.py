@@ -113,6 +113,18 @@ class TestBuildBM25Index:
         scores = index.get_scores(["asyncpg"])
         assert len(scores) == 3
 
+    def test_bm25_two_nodes_scores_two_values(self) -> None:
+        nodes = [_make_node("asyncpg pool"), _make_node("jwt auth")]
+        index = build_bm25_index(nodes)
+        scores = index.get_scores(["asyncpg"])
+        assert len(scores) == 2
+
+    def test_bm25_index_scores_are_numeric(self) -> None:
+        nodes = [_make_node("asyncpg"), _make_node("jwt"), _make_node("redis")]
+        index = build_bm25_index(nodes)
+        scores = index.get_scores(["asyncpg"])
+        assert all(isinstance(float(s), float) for s in scores)
+
 
 # ---------------------------------------------------------------------------
 # vector_channel
