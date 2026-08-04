@@ -177,6 +177,21 @@ class TestWriteNode:
         assert found is not None
         assert found.text == text
 
+    def test_write_node_weight_stored_as_float(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, weight=2.5))
+        found = graph.get_node(node_id)
+        assert found is not None
+        assert isinstance(found.weight, float)
+        assert found.weight == pytest.approx(2.5, abs=1e-5)
+
+    def test_write_node_id_is_string(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        assert isinstance(node_id, str)
+
 
 # ---------------------------------------------------------------------------
 # merge_node
