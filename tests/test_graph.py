@@ -977,6 +977,24 @@ class TestEdges:
         edges = graph.get_edges("no-such-node")
         assert edges == []
 
+    def test_edge_first_write_strength_is_one(
+        self, graph: Graph, dummy_embedding: np.ndarray, alt_embedding: np.ndarray
+    ) -> None:
+        id_a = graph.write_node(_make_node(dummy_embedding, text="first a"))
+        id_b = graph.write_node(_make_node(alt_embedding, text="first b"))
+        graph.write_edge(id_a, id_b)
+        edges = graph.get_edges(id_a)
+        assert edges[0].strength == pytest.approx(1.0, abs=1e-5)
+
+    def test_edge_strength_is_float_type(
+        self, graph: Graph, dummy_embedding: np.ndarray, alt_embedding: np.ndarray
+    ) -> None:
+        id_a = graph.write_node(_make_node(dummy_embedding, text="float a"))
+        id_b = graph.write_node(_make_node(alt_embedding, text="float b"))
+        graph.write_edge(id_a, id_b)
+        edges = graph.get_edges(id_a)
+        assert isinstance(edges[0].strength, float)
+
 
 # ---------------------------------------------------------------------------
 # update_weight
