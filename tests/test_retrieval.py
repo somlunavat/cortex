@@ -201,6 +201,18 @@ class TestVectorChannel:
         results = vector_channel(q, nodes)
         assert results[0].score == pytest.approx(results[1].score, abs=1e-5)
 
+    def test_each_scored_node_has_node_field(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("check node", embedding=e)]
+        results = vector_channel(e, nodes)
+        assert hasattr(results[0], "node")
+
+    def test_score_values_are_float(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("float check", embedding=e)]
+        results = vector_channel(e, nodes)
+        assert isinstance(results[0].score, float)
+
 
 # ---------------------------------------------------------------------------
 # bm25_channel
