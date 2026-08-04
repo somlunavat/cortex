@@ -388,6 +388,20 @@ class TestOpenGraph:
         result = _open_graph_at(db_path)
         assert result is None
 
+    def test_create_twice_same_path_works(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "double.db"
+        _create_graph_at(db_path)
+        graph = _create_graph_at(db_path)
+        assert isinstance(graph, Graph)
+
+    def test_graph_writable_after_open(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "open_write.db"
+        _create_graph_at(db_path)
+        graph = _open_graph_at(db_path)
+        assert graph is not None
+        node_id = graph.write_node(_make_node("test write after open"))
+        assert len(node_id) == 36
+
 
 # ---------------------------------------------------------------------------
 # main() entry points
