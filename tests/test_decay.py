@@ -646,6 +646,14 @@ class TestDecayResult:
         result = run_decay(graph, TEST_PROJECT)
         assert result.nodes_evicted >= 1
 
+    def test_decay_result_nodes_decayed_is_nonneg(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed >= 0
+
+    def test_decay_result_nodes_evicted_is_nonneg(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_evicted >= 0
+
 
 # ---------------------------------------------------------------------------
 # _meets_promotion_criteria — parametrized unit tests
