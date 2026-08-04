@@ -405,6 +405,26 @@ class TestGraphChannel:
         for scored in results:
             assert scored.node in nodes
 
+    def test_result_length_matches_input(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        for i in range(3):
+            graph.write_node(_make_node(f"node {i}", embedding=e))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        results = graph_channel([], graph, nodes)
+        assert len(results) == len(nodes)
+
+    def test_all_scores_are_floats(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("score type check", embedding=e))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        results = graph_channel([], graph, nodes)
+        for scored in results:
+            assert isinstance(scored.score, float)
+
 
 # ---------------------------------------------------------------------------
 # fuse_scores
