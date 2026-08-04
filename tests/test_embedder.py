@@ -254,6 +254,15 @@ class TestSerializeDeserializeInt2:
         blob = serialize(dummy_vec, precision_bits=2)
         assert isinstance(blob, bytes)
 
+    def test_int2_blob_not_empty(self, dummy_vec: np.ndarray) -> None:
+        blob = serialize(dummy_vec, precision_bits=2)
+        assert len(blob) > 0
+
+    def test_int2_round_trip_length_matches_input(self, dummy_vec: np.ndarray) -> None:
+        blob = serialize(dummy_vec, precision_bits=2)
+        recovered = deserialize(blob, precision_bits=2)
+        assert len(recovered) == len(dummy_vec)
+
 
 # ---------------------------------------------------------------------------
 # cosine_similarity
