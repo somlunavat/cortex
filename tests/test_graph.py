@@ -1968,6 +1968,28 @@ class TestGetTypeCounts:
         assert pairs[0][0] == "fact"
         assert pairs[0][1] == 1
 
+    def test_two_types_returns_two_entries(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(dummy_embedding, text="obs node", node_type="observation")
+        )
+        graph.write_node(
+            _make_node(dummy_embedding, text="err node", node_type="error")
+        )
+        pairs = graph.get_type_counts(TEST_PROJECT)
+        assert len(pairs) == 2
+
+    def test_count_value_is_int(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(dummy_embedding, text="conv node", node_type="convention")
+        )
+        pairs = graph.get_type_counts(TEST_PROJECT)
+        assert len(pairs) == 1
+        assert isinstance(pairs[0][1], int)
+
 
 class TestGetSourceCounts:
     def test_groups_by_source(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
