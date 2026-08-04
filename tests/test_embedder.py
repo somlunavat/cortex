@@ -76,6 +76,15 @@ class TestEmbedBatch:
         result = embed_batch(texts)
         assert all(v.dtype == np.float32 for v in result)
 
+    def test_batch_result_is_list_type(self) -> None:
+        result = embed_batch(["one", "two"])
+        assert isinstance(result, list)
+
+    def test_batch_empty_string_produces_384_dim(self) -> None:
+        result = embed_batch([""])
+        assert len(result) == 1
+        assert result[0].shape == (_EMBEDDING_DIM,)
+
 
 class TestEmbed:
     def test_returns_384_dim_vector(self) -> None:
