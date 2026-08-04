@@ -2030,10 +2030,10 @@ class TestGetLastSession:
         last = graph.get_last_session(TEST_PROJECT)
         assert isinstance(last, dict)
 
-    def test_session_id_field_present(self, graph: Graph) -> None:
+    def test_ended_at_field_present(self, graph: Graph) -> None:
         now = int(time.time())
         graph.write_session(
-            session_id="id-check-sess",
+            session_id="ended-check-sess",
             project=TEST_PROJECT,
             started_at=now - 30,
             ended_at=now,
@@ -2044,8 +2044,8 @@ class TestGetLastSession:
         )
         last = graph.get_last_session(TEST_PROJECT)
         assert last is not None
-        assert "session_id" in last
-        assert last["session_id"] == "id-check-sess"
+        assert "ended_at" in last
+        assert last["ended_at"] == now
 
 
 # ---------------------------------------------------------------------------
