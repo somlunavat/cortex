@@ -2108,6 +2108,38 @@ class TestGetLastSession:
         assert last["nodes_evicted"] == 2
         assert last["nodes_promoted"] == 1
 
+    def test_returns_dict_type(self, graph: Graph) -> None:
+        now = int(time.time())
+        graph.write_session(
+            session_id="dict-sess",
+            project=TEST_PROJECT,
+            started_at=now - 30,
+            ended_at=now,
+            nodes_written=0,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="",
+        )
+        last = graph.get_last_session(TEST_PROJECT)
+        assert isinstance(last, dict)
+
+    def test_ended_at_field_present(self, graph: Graph) -> None:
+        now = int(time.time())
+        graph.write_session(
+            session_id="ended-check-sess",
+            project=TEST_PROJECT,
+            started_at=now - 30,
+            ended_at=now,
+            nodes_written=0,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="",
+        )
+        last = graph.get_last_session(TEST_PROJECT)
+        assert last is not None
+        assert "ended_at" in last
+        assert last["ended_at"] == now
+
 
 # ---------------------------------------------------------------------------
 # get_recent_nodes
