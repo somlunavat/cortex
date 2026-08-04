@@ -2082,6 +2082,25 @@ class TestGetRecentNodes:
         assert len(recent) == 1
         assert recent[0].text == "only"
 
+    def test_result_node_text_is_str(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="str check"))
+        recent = graph.get_recent_nodes(TEST_PROJECT, limit=5)
+        assert len(recent) == 1
+        assert isinstance(recent[0].text, str)
+
+    def test_result_excludes_other_project(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="mine", project=TEST_PROJECT))
+        graph.write_node(
+            _make_node(dummy_embedding, text="theirs", project="/other/project")
+        )
+        recent = graph.get_recent_nodes(TEST_PROJECT, limit=10)
+        assert len(recent) == 1
+        assert recent[0].text == "mine"
+
 
 # ---------------------------------------------------------------------------
 # get_aggregate_stats
