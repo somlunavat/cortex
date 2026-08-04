@@ -1382,6 +1382,24 @@ class TestTouchNodes:
     def test_touch_unknown_id_is_silent(self, graph: Graph) -> None:
         graph.touch_nodes(["no-such-id"], now=int(time.time()))  # must not raise
 
+    def test_touch_two_calls_last_timestamp_wins(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        n_id = graph.write_node(_make_node(dummy_embedding, text="timestamp test"))
+        now = int(time.time())
+        graph.touch_nodes([n_id], now=now + 50)
+        graph.touch_nodes([n_id], now=now + 200)
+        node = graph.get_node(n_id)
+        assert node is not None
+        assert node.last_accessed == now + 200
+
+    def test_touch_returns_none(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        n_id = graph.write_node(_make_node(dummy_embedding))
+        result = graph.touch_nodes([n_id], now=int(time.time()))
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # get_nodes_by_source
