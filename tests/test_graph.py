@@ -289,6 +289,24 @@ class TestMergeNode:
         merged_weight = graph.get_all_nodes(project=TEST_PROJECT)[0].weight
         assert merged_weight > initial_weight
 
+    def test_merge_node_type_preserved(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(dummy_embedding, node_type="fact")
+        node_id = graph.write_node(node)
+        candidate = _make_node(dummy_embedding, node_type="fact")
+        graph.merge_node(existing_id=node_id, candidate=candidate)
+        rows = graph.get_all_nodes(project=TEST_PROJECT)
+        assert rows[0].type == "fact"
+
+    def test_merge_node_returns_none(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(dummy_embedding)
+        node_id = graph.write_node(node)
+        result = graph.merge_node(existing_id=node_id, candidate=node)
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # MERGE_WEIGHT_BUMP constant and precise merge arithmetic
