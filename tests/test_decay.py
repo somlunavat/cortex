@@ -406,6 +406,29 @@ class TestTier1Promotion:
         if promoted:
             assert result.nodes_promoted >= 1
 
+    def test_tier1_node_project_preserved_after_promotion(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=TIER1_PROMOTION_WEIGHT + 2.0,
+                session_count=TIER1_PROMOTION_SESSIONS,
+                text="project check",
+                project=TEST_PROJECT,
+            )
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        matched = [n for n in nodes if n.text == "project check"]
+        if matched:
+            assert matched[0].project == TEST_PROJECT
+
+    def test_empty_project_promotion_count_zero(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_promoted == 0
+
 
 # ---------------------------------------------------------------------------
 # Promotion — Tier 2 → Tier 3
