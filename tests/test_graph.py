@@ -2014,6 +2014,22 @@ class TestGetSourceCounts:
         assert len(pairs) == 1
         assert pairs[0] == ("git", 1)
 
+    def test_two_sources_returns_two_entries(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="ast1", source="ast"))
+        graph.write_node(_make_node(dummy_embedding, text="nlp2", source="nlp"))
+        pairs = graph.get_source_counts(TEST_PROJECT)
+        assert len(pairs) == 2
+
+    def test_source_name_is_str(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="src node", source="jsonl"))
+        pairs = graph.get_source_counts(TEST_PROJECT)
+        assert len(pairs) == 1
+        assert isinstance(pairs[0][0], str)
+
 
 # ---------------------------------------------------------------------------
 # get_last_session
