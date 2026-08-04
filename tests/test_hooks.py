@@ -892,6 +892,29 @@ class TestWireCoOccurringEdges:
         assert id_main
         assert graph.get_edges(id_main) == []
 
+    def test_wire_edge_strength_is_one_on_first_call(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "x.py", "y.py")
+        co_pairs: tuple[frozenset[str], ...] = (
+            frozenset({f"{TEST_PROJECT}/x.py", f"{TEST_PROJECT}/y.py"}),
+        )
+        _wire_co_occurring_edges(co_pairs, file_ids, TEST_PROJECT, graph)
+        id_x = file_ids.get("x.py")
+        assert id_x
+        edges = graph.get_edges(id_x)
+        assert len(edges) == 1
+        assert edges[0].strength == pytest.approx(1.0, abs=1e-5)
+
+    def test_wire_returns_none(self, graph: Graph, rng: np.random.Generator) -> None:
+        from hooks.extract import _wire_co_occurring_edges
+
+        file_ids = self._make_file_nodes(graph, rng, "a.py", "b.py")
+        result = _wire_co_occurring_edges((), file_ids, TEST_PROJECT, graph)
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # compact.py (PostCompact hook)
