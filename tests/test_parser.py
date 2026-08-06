@@ -569,6 +569,22 @@ class TestDetectCoOccurringWrites:
         assert len(pair) == 2
         assert all(isinstance(p, str) for p in pair)
 
+    def test_co_occurring_pair_frozenset_size_is_two(self) -> None:
+        events = [
+            _make_write_event("/proj/alpha.py", timestamp=0),
+            _make_write_event("/proj/beta.py", timestamp=10),
+        ]
+        pairs = detect_co_occurring_writes(events)
+        assert all(len(p) == 2 for p in pairs)
+
+    def test_co_occurring_empty_path_write_not_counted(self) -> None:
+        events = [
+            _make_event(EventType.FILE_WRITE, timestamp=0, data={"path": ""}),
+            _make_write_event("/proj/real.py", timestamp=5),
+        ]
+        pairs = detect_co_occurring_writes(events)
+        assert len(pairs) == 0
+
 
 # ---------------------------------------------------------------------------
 # extract_prose_turns
