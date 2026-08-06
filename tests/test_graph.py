@@ -2458,6 +2458,14 @@ class TestGetAggregateStats:
         assert agg["session_count"] == 0
         assert agg["total_written"] == 0
 
+    def test_aggregate_stats_result_is_dict_type(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert isinstance(result, dict)
+
+    def test_aggregate_stats_has_total_written_key(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert "total_written" in result
+
 
 # ---------------------------------------------------------------------------
 # query_nodes_page
