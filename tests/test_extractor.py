@@ -201,6 +201,26 @@ class TestAstChannel:
         result = ast_channel([txt_file], TEST_PROJECT)
         assert result == []
 
+    def test_ast_channel_file_in_tests_subdir_skipped(self, tmp_path: Path) -> None:
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        py_file = tests_dir / "helpers.py"
+        py_file.write_text("def helper(): pass")
+        result = ast_channel([py_file], str(tmp_path))
+        assert result == []
+
+    def test_ast_channel_multiple_test_files_returns_empty(
+        self, tmp_path: Path
+    ) -> None:
+        for name in ("test_auth.py", "test_db.py", "test_api.py"):
+            f = tmp_path / name
+            f.write_text("def test_foo(): pass")
+        result = ast_channel(
+            [tmp_path / name for name in ("test_auth.py", "test_db.py", "test_api.py")],
+            TEST_PROJECT,
+        )
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # Channel 4: nlp_channel (NLP — Channel 3 git is integration-only)
