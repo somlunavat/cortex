@@ -286,6 +286,21 @@ class TestBM25Channel:
         assert "asyncpg pool" in result_texts
         assert "jwt auth" in result_texts
 
+    def test_bm25_scored_node_id_preserved(self) -> None:
+        nodes = [_make_node("unique text for id check")]
+        for n in nodes:
+            object.__setattr__(n, "id", "test-node-id-123")
+        index = build_bm25_index(nodes)
+        results = bm25_channel("unique", nodes, index)
+        assert len(results) == 1
+        assert results[0].node.id == "test-node-id-123"
+
+    def test_bm25_all_scores_non_negative(self) -> None:
+        nodes = [_make_node("auth middleware"), _make_node("database pool")]
+        index = build_bm25_index(nodes)
+        results = bm25_channel("auth", nodes, index)
+        assert all(r.score >= 0.0 for r in results)
+
 
 # ---------------------------------------------------------------------------
 # graph_channel
