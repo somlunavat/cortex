@@ -9,6 +9,7 @@ import pytest
 from core.extractor import (
     DURABILITY_THRESHOLD,
     NodeType,
+    ScopeType,
     SourceType,
     _is_retracted,
     _score_durability,
@@ -159,6 +160,20 @@ class TestJsonlChannel:
         errors = [c for c in candidates if c.type == NodeType.ERROR]
         assert len(errors) >= 1
         assert all(c.type == NodeType.ERROR for c in errors)
+
+    def test_hotspot_candidate_scope_is_module(self) -> None:
+        events = [_write_event(f"{TEST_PROJECT}/auth.py", ts) for ts in range(3)]
+        candidates = jsonl_channel(events, TEST_PROJECT)
+        obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
+        assert len(obs) >= 1
+        assert all(c.scope == ScopeType.MODULE for c in obs)
+
+    def test_error_candidate_scope_is_session(self) -> None:
+        events = [_failure_event(command="pytest", exit_code=1, output="Error")]
+        candidates = jsonl_channel(events, TEST_PROJECT)
+        errors = [c for c in candidates if c.type == NodeType.ERROR]
+        assert len(errors) >= 1
+        assert all(c.scope == ScopeType.SESSION for c in errors)
 
 
 # ---------------------------------------------------------------------------
