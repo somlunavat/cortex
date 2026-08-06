@@ -381,6 +381,17 @@ class TestHelpers:
         assert conclusion
         assert rationale is None
 
+    def test_is_retracted_detects_never_mind(self) -> None:
+        assert _is_retracted("never mind, let's keep it as is") is True
+
+    def test_split_on_conjunction_so_that_splits(self) -> None:
+        conclusion, rationale = _split_on_conjunction(
+            "We cache results so that repeated calls are fast."
+        )
+        assert conclusion is not None
+        assert rationale is not None
+        assert "We cache results" in conclusion
+
 
 # ---------------------------------------------------------------------------
 # run_extraction — integration
