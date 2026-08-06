@@ -666,6 +666,23 @@ class TestGetAllNodes:
         assert len(tier2_nodes) == 1
         assert tier2_nodes[0].tier == 2
 
+    def test_get_all_nodes_node_text_preserved(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="unique probe text"))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert len(nodes) == 1
+        assert nodes[0].text == "unique probe text"
+
+    def test_get_all_nodes_tier3_filter_works(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, text="tier1"))
+        graph.write_node(_make_node(dummy_embedding, tier=3, text="tier3"))
+        tier3_nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=3)
+        assert len(tier3_nodes) == 1
+        assert tier3_nodes[0].tier == 3
+
 
 # ---------------------------------------------------------------------------
 # delete_node
