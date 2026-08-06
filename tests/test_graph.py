@@ -1952,6 +1952,21 @@ class TestGetTierCounts:
         counts = graph.get_tier_counts(TEST_PROJECT)
         assert 2 not in counts
 
+    def test_tier_count_tuple_length_is_two(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="node", tier=1))
+        counts = graph.get_tier_counts(TEST_PROJECT)
+        assert len(counts[1]) == 2
+
+    def test_tier_count_key_matches_node_tier(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="tier2 node", tier=2))
+        counts = graph.get_tier_counts(TEST_PROJECT)
+        assert 2 in counts
+        assert 1 not in counts
+
 
 # ---------------------------------------------------------------------------
 # get_type_counts / get_source_counts
