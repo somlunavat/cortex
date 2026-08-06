@@ -764,3 +764,20 @@ class TestSummarizeSession:
         events = [_make_event(EventType.SESSION_START, session_id="sess-abc")]
         summary = summarize_session(events)
         assert isinstance(summary.session_id, str)
+
+    def test_summarize_session_failure_type_is_bash_failure(self) -> None:
+        events = [
+            _make_event(
+                EventType.BASH_FAILURE,
+                data={"command": "pytest", "exit_code": 2},
+            )
+        ]
+        summary = summarize_session(events)
+        assert len(summary.bash_failures) == 1
+        assert summary.bash_failures[0].type == EventType.BASH_FAILURE
+
+    def test_summarize_session_prose_text_preserved(self) -> None:
+        text = "We decided to use asyncpg for database access."
+        events = [_make_event(EventType.ASSISTANT_MESSAGE, data={"text": text})]
+        summary = summarize_session(events)
+        assert text in summary.prose_turns
