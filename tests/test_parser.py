@@ -433,6 +433,20 @@ class TestDetectHotspots:
         hotspots = detect_hotspots(events)
         assert "/proj/main.py" in hotspots
 
+    def test_hotspot_path_string_exact(self) -> None:
+        path = "/proj/exact_path.py"
+        events = [_make_write_event(path, ts) for ts in range(HOTSPOT_WRITE_THRESHOLD)]
+        hotspots = detect_hotspots(events)
+        assert path in hotspots
+
+    def test_hotspot_empty_path_write_ignored(self) -> None:
+        events = [
+            _make_event(EventType.FILE_WRITE, timestamp=ts, data={"path": ""})
+            for ts in range(HOTSPOT_WRITE_THRESHOLD + 2)
+        ]
+        hotspots = detect_hotspots(events)
+        assert len(hotspots) == 0
+
 
 # ---------------------------------------------------------------------------
 # detect_co_occurring_writes
