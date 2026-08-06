@@ -828,6 +828,22 @@ class TestFormatInjectionBlock:
         block = format_injection_block(nodes, TEST_PROJECT)
         assert "[RELEVANT CONTEXT" in block
 
+    def test_format_injection_block_budget_in_footer(
+        self, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("some fact", tier=1, embedding=e)]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "budget:" in block
+
+    def test_format_injection_block_ends_with_equals(
+        self, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        nodes = [_make_node("end check", tier=1, embedding=e)]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert block.endswith("===")
+
 
 # ---------------------------------------------------------------------------
 # Parametrized: fuse_scores weight proportions
