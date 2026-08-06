@@ -2891,6 +2891,30 @@ class TestGetSessionRecords:
         assert "ended_at" in records[0]
         assert records[0]["ended_at"] == 9000
 
+    def test_session_records_include_transcript_path(self, graph: Graph) -> None:
+        import uuid as _uuid
+
+        sid = str(_uuid.uuid4())
+        graph.write_session(
+            session_id=sid,
+            project=TEST_PROJECT,
+            started_at=1000,
+            ended_at=2000,
+            nodes_written=0,
+            nodes_evicted=0,
+            nodes_promoted=0,
+            transcript_path="/tmp/my_session.jsonl",
+        )
+        records = graph.get_session_records(TEST_PROJECT)
+        assert "transcript_path" in records[0]
+        assert records[0]["transcript_path"] == "/tmp/my_session.jsonl"
+
+    def test_session_records_id_field_present(self, graph: Graph) -> None:
+        sid = self._write_session(graph, ended_at=10000)
+        records = graph.get_session_records(TEST_PROJECT)
+        assert "id" in records[0]
+        assert records[0]["id"] == sid
+
 
 # ---------------------------------------------------------------------------
 # TestQueryNodesPageSortCols
