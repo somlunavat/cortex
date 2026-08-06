@@ -2458,6 +2458,17 @@ class TestQueryNodesPage:
         assert total == 1
         assert nodes[0].source == "nlp"
 
+    def test_query_nodes_page_total_is_int(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="n1"))
+        _nodes, total = graph.query_nodes_page(TEST_PROJECT)
+        assert isinstance(total, int)
+
+    def test_query_nodes_page_first_element_is_list(self, graph: Graph) -> None:
+        nodes, _total = graph.query_nodes_page(TEST_PROJECT)
+        assert isinstance(nodes, list)
+
 
 # ---------------------------------------------------------------------------
 # find_similar — validation guards (lines 266, 268)
