@@ -558,6 +558,30 @@ class TestFindSimilar:
         )
         assert all(len(n.text) > 0 for n in results)
 
+    def test_find_similar_result_count_capped_by_limit(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(4):
+            graph.write_node(_make_node(dummy_embedding, text=f"node {i}"))
+        results = graph.find_similar(
+            embedding=dummy_embedding,
+            project=TEST_PROJECT,
+            threshold=0.9,
+            limit=2,
+        )
+        assert len(results) == 2
+
+    def test_find_similar_invalid_threshold_raises(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        with pytest.raises(ValueError):
+            graph.find_similar(
+                embedding=dummy_embedding,
+                project=TEST_PROJECT,
+                threshold=1.5,
+                limit=5,
+            )
+
 
 # ---------------------------------------------------------------------------
 # get_all_nodes
