@@ -1347,6 +1347,37 @@ class TestWriteSession:
                 transcript_path="/tmp/neg.jsonl",
             )
 
+    def test_write_session_evicted_count_stored(self, graph: Graph) -> None:
+        import uuid as _uuid
+
+        sid = str(_uuid.uuid4())
+        graph.write_session(
+            session_id=sid,
+            project=TEST_PROJECT,
+            started_at=1000,
+            ended_at=2000,
+            nodes_written=0,
+            nodes_evicted=5,
+            nodes_promoted=0,
+            transcript_path="/tmp/t.jsonl",
+        )
+        last = graph.get_last_session(TEST_PROJECT)
+        assert last is not None
+        assert last["nodes_evicted"] == 5
+
+    def test_write_session_negative_evicted_raises(self, graph: Graph) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            graph.write_session(
+                session_id="ev-id",
+                project=TEST_PROJECT,
+                started_at=1000,
+                ended_at=2000,
+                nodes_written=0,
+                nodes_evicted=-1,
+                nodes_promoted=0,
+                transcript_path="/tmp/ev.jsonl",
+            )
+
 
 class TestTouchNodes:
     def test_touch_updates_last_accessed(
