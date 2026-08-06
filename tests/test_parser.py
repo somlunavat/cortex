@@ -643,6 +643,23 @@ class TestExtractProseTurns:
         prose = extract_prose_turns(events)
         assert all(isinstance(t, str) for t in prose)
 
+    def test_prose_user_message_excluded(self) -> None:
+        events = [
+            _make_event(EventType.USER_MESSAGE, data={"text": "user question"}),
+            _make_event(EventType.ASSISTANT_MESSAGE, data={"text": "assistant reply"}),
+        ]
+        prose = extract_prose_turns(events)
+        assert len(prose) == 1
+        assert prose[0] == "assistant reply"
+
+    def test_prose_multiple_messages_length_matches(self) -> None:
+        events = [
+            _make_event(EventType.ASSISTANT_MESSAGE, data={"text": f"turn {i}"})
+            for i in range(3)
+        ]
+        prose = extract_prose_turns(events)
+        assert len(prose) == 3
+
 
 # ---------------------------------------------------------------------------
 # summarize_session
