@@ -161,6 +161,23 @@ class TestRunExtract:
         other_nodes = graph.get_all_nodes(project="/some/other/project")
         assert len(other_nodes) == 0
 
+    def test_extract_result_is_int_type(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert isinstance(result, int)
+
+    def test_extract_returns_nonneg(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert result >= 0
+
+    def test_extract_nodes_have_project_set(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert all(n.project == TEST_PROJECT for n in nodes)
+
+    def test_extract_missing_path_returns_zero(self, graph: Graph) -> None:
+        result = run_extract(Path("/no/such/file.jsonl"), TEST_PROJECT, graph)
+        assert result == 0
+
 
 # ---------------------------------------------------------------------------
 # run_inject
