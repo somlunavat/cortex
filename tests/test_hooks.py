@@ -467,6 +467,30 @@ class TestOpenGraph:
         node_id = graph.write_node(_make_node("test write after open"))
         assert len(node_id) == 36
 
+    def test_create_graph_returns_graph_instance(self, tmp_path: Path) -> None:
+        result = _create_graph_at(tmp_path / "c.db")
+        assert isinstance(result, Graph)
+
+    def test_open_graph_at_path_with_space(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "my db.db"
+        _create_graph_at(db_path)
+        graph = _open_graph_at(db_path)
+        assert isinstance(graph, Graph)
+
+    def test_create_graph_db_file_exists(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "exists.db"
+        _create_graph_at(db_path)
+        assert db_path.is_file()
+
+    def test_open_after_create_readable(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "r.db"
+        g = _create_graph_at(db_path)
+        g.write_node(_make_node("hello"))
+        g2 = _open_graph_at(db_path)
+        assert g2 is not None
+        nodes = g2.get_all_nodes(project="/tmp/cortex_hooks_test")
+        assert isinstance(nodes, list)
+
 
 # ---------------------------------------------------------------------------
 # main() entry points
