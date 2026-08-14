@@ -829,6 +829,28 @@ class TestDecayResult:
         result = run_decay(graph, TEST_PROJECT)
         assert result.nodes_evicted >= 0
 
+    def test_decay_result_nodes_promoted_nonneg(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_promoted >= 0
+
+    def test_decay_result_all_counts_int(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result.nodes_decayed, int)
+        assert isinstance(result.nodes_evicted, int)
+        assert isinstance(result.nodes_promoted, int)
+
+    def test_decay_result_project_not_empty(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert len(result.project) > 0
+
+    def test_decay_result_evicted_le_decayed(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for _ in range(3):
+            graph.write_node(_make_node(dummy_embedding, tier=1, weight=1.5))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_evicted <= result.nodes_decayed
+
 
 # ---------------------------------------------------------------------------
 # _meets_promotion_criteria — parametrized unit tests
