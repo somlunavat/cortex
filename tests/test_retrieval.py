@@ -888,6 +888,35 @@ class TestFormatInjectionBlock:
         block = format_injection_block(nodes, TEST_PROJECT)
         assert block.endswith("===")
 
+    def test_returns_str_for_empty_list(self) -> None:
+        block = format_injection_block([], TEST_PROJECT)
+        assert isinstance(block, str)
+
+    def test_multiple_tier1_nodes_all_appear(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [
+            _make_node("fact alpha", tier=1, embedding=e),
+            _make_node("fact beta", tier=1, embedding=e),
+        ]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "fact alpha" in block
+        assert "fact beta" in block
+
+    def test_block_contains_project_path_str(self) -> None:
+        block = format_injection_block([], TEST_PROJECT)
+        assert isinstance(TEST_PROJECT, str)
+        assert TEST_PROJECT in block
+
+    def test_tier3_and_tier1_both_in_block(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [
+            _make_node("convention text", tier=3, embedding=e),
+            _make_node("context text", tier=1, embedding=e),
+        ]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "convention text" in block
+        assert "context text" in block
+
 
 # ---------------------------------------------------------------------------
 # Parametrized: fuse_scores weight proportions
