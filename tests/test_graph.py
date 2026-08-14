@@ -2346,6 +2346,32 @@ class TestGetRecentNodes:
         assert len(recent) == 1
         assert recent[0].text == "mine"
 
+    def test_recent_nodes_returns_list(self, graph: Graph) -> None:
+        result = graph.get_recent_nodes(TEST_PROJECT)
+        assert isinstance(result, list)
+
+    def test_recent_nodes_limit_one(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(5):
+            graph.write_node(_make_node(dummy_embedding, text=f"node{i}"))
+        result = graph.get_recent_nodes(TEST_PROJECT, limit=1)
+        assert len(result) == 1
+
+    def test_recent_nodes_node_has_text_attr(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="hello"))
+        result = graph.get_recent_nodes(TEST_PROJECT)
+        assert hasattr(result[0], "text")
+
+    def test_recent_nodes_project_field_matches(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="check"))
+        result = graph.get_recent_nodes(TEST_PROJECT)
+        assert result[0].project == TEST_PROJECT
+
 
 # ---------------------------------------------------------------------------
 # get_aggregate_stats
