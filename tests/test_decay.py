@@ -178,6 +178,38 @@ class TestDecayRates:
         result = run_decay(graph, TEST_PROJECT)
         assert isinstance(result, DecayResult)
 
+    def test_decay_result_project_field_is_str(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1))
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result.project, str)
+
+    def test_decay_skips_other_project_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        other = "/other/proj"
+        graph.write_node(_make_node(dummy_embedding, tier=1, project=other, weight=5.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=other, tier=1)
+        assert len(nodes) == 1
+        assert nodes[0].weight == 5.0
+
+    def test_tier2_weight_lower_after_decay(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=3.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        if nodes:
+            assert nodes[0].weight < 3.0
+
+    def test_decay_result_nodes_decayed_nonneg(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed >= 0
+
 
 # ---------------------------------------------------------------------------
 # Eviction
