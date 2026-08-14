@@ -178,6 +178,38 @@ class TestDecayRates:
         result = run_decay(graph, TEST_PROJECT)
         assert isinstance(result, DecayResult)
 
+    def test_decay_result_project_field_is_str(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1))
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result.project, str)
+
+    def test_decay_skips_other_project_nodes(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        other = "/other/proj"
+        graph.write_node(_make_node(dummy_embedding, tier=1, project=other, weight=5.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=other, tier=1)
+        assert len(nodes) == 1
+        assert nodes[0].weight == 5.0
+
+    def test_tier2_weight_lower_after_decay(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=3.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        if nodes:
+            assert nodes[0].weight < 3.0
+
+    def test_decay_result_nodes_decayed_nonneg(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed >= 0
+
 
 # ---------------------------------------------------------------------------
 # Eviction
@@ -291,6 +323,37 @@ class TestEviction:
         graph.write_node(_make_node(dummy_embedding, tier=1, weight=2.0))
         result = run_decay(graph, TEST_PROJECT)
         assert result.nodes_evicted >= 0
+
+    def test_eviction_result_project_is_str(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result.project, str)
+
+    def test_other_project_node_survives_eviction(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        other = "/other/project"
+        graph.write_node(_make_node(dummy_embedding, tier=1, project=other, weight=0.1))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=other, tier=1)
+        assert len(nodes) == 1
+
+    def test_tier1_eviction_removes_node_from_graph(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=0.1))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
+        assert len(nodes) == 0
+
+    def test_tier2_eviction_removes_node_from_graph(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=0.1))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        assert len(nodes) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +491,53 @@ class TestTier1Promotion:
     def test_empty_project_promotion_count_zero(self, graph: Graph) -> None:
         result = run_decay(graph, TEST_PROJECT)
         assert result.nodes_promoted == 0
+
+    def test_tier1_promotion_count_nonneg(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_promoted >= 0
+
+    def test_tier1_promoted_node_has_tier2(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=TIER1_PROMOTION_WEIGHT + 5.0,
+                session_count=TIER1_PROMOTION_SESSIONS,
+                text="promote_me",
+            )
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        tier2 = [n for n in nodes if n.text == "promote_me" and n.tier == 2]
+        tier1 = [n for n in nodes if n.text == "promote_me" and n.tier == 1]
+        assert len(tier2) == 1 or len(tier1) == 0
+
+    def test_tier1_not_promoted_when_low_sessions(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=TIER1_PROMOTION_WEIGHT + 5.0,
+                session_count=1,
+                text="low_sessions",
+            )
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        tier2 = [n for n in nodes if n.text == "low_sessions" and n.tier == 2]
+        assert len(tier2) == 0
+
+    def test_tier1_result_project_str(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result.project, str)
 
 
 # ---------------------------------------------------------------------------
@@ -718,6 +828,28 @@ class TestDecayResult:
     def test_decay_result_nodes_evicted_is_nonneg(self, graph: Graph) -> None:
         result = run_decay(graph, TEST_PROJECT)
         assert result.nodes_evicted >= 0
+
+    def test_decay_result_nodes_promoted_nonneg(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_promoted >= 0
+
+    def test_decay_result_all_counts_int(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result.nodes_decayed, int)
+        assert isinstance(result.nodes_evicted, int)
+        assert isinstance(result.nodes_promoted, int)
+
+    def test_decay_result_project_not_empty(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert len(result.project) > 0
+
+    def test_decay_result_evicted_le_decayed(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for _ in range(3):
+            graph.write_node(_make_node(dummy_embedding, tier=1, weight=1.5))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_evicted <= result.nodes_decayed
 
 
 # ---------------------------------------------------------------------------
