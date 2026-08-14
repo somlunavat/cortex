@@ -2629,6 +2629,36 @@ class TestQueryNodesPage:
         nodes, _total = graph.query_nodes_page(TEST_PROJECT)
         assert isinstance(nodes, list)
 
+    def test_tier_filter_limits_results(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="t1", tier=1))
+        graph.write_node(_make_node(dummy_embedding, text="t2", tier=2))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT, tier=1)
+        assert total == 1
+        assert nodes[0].tier == 1
+
+    def test_multiple_nodes_total_accurate(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(4):
+            graph.write_node(_make_node(dummy_embedding, text=f"n{i}", weight=float(i)))
+        _nodes, total = graph.query_nodes_page(TEST_PROJECT)
+        assert total == 4
+
+    def test_returned_nodes_are_node_instances(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="x"))
+        from core.graph import Node
+
+        nodes, _ = graph.query_nodes_page(TEST_PROJECT)
+        assert isinstance(nodes[0], Node)
+
+    def test_total_nonneg_empty(self, graph: Graph) -> None:
+        _, total = graph.query_nodes_page(TEST_PROJECT)
+        assert total >= 0
+
 
 # ---------------------------------------------------------------------------
 # find_similar — validation guards (lines 266, 268)
