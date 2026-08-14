@@ -679,6 +679,35 @@ class TestRetrieve:
         texts = [n.text for n in result]
         assert any("unique fact about asyncpg" in t for t in texts)
 
+    def test_retrieve_empty_query_returns_list(self, graph: Graph) -> None:
+        result = retrieve("", TEST_PROJECT, graph)
+        assert isinstance(result, list)
+
+    def test_retrieve_result_nodes_are_node_instances(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("test node", tier=1, embedding=e))
+        result = retrieve("test", TEST_PROJECT, graph)
+        for n in result:
+            assert isinstance(n, Node)
+
+    def test_retrieve_single_tier3_always_included(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("permanent convention", tier=3, embedding=e))
+        result = retrieve("unrelated query xyz", TEST_PROJECT, graph)
+        assert len(result) >= 1
+
+    def test_retrieve_wrong_project_returns_empty(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("data", project=TEST_PROJECT, embedding=e))
+        result = retrieve("query", "/completely/different", graph)
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # format_injection_block
