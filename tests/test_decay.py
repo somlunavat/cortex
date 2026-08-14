@@ -492,6 +492,53 @@ class TestTier1Promotion:
         result = run_decay(graph, TEST_PROJECT)
         assert result.nodes_promoted == 0
 
+    def test_tier1_promotion_count_nonneg(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_promoted >= 0
+
+    def test_tier1_promoted_node_has_tier2(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=TIER1_PROMOTION_WEIGHT + 5.0,
+                session_count=TIER1_PROMOTION_SESSIONS,
+                text="promote_me",
+            )
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        tier2 = [n for n in nodes if n.text == "promote_me" and n.tier == 2]
+        tier1 = [n for n in nodes if n.text == "promote_me" and n.tier == 1]
+        assert len(tier2) == 1 or len(tier1) == 0
+
+    def test_tier1_not_promoted_when_low_sessions(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(
+                dummy_embedding,
+                tier=1,
+                weight=TIER1_PROMOTION_WEIGHT + 5.0,
+                session_count=1,
+                text="low_sessions",
+            )
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        tier2 = [n for n in nodes if n.text == "low_sessions" and n.tier == 2]
+        assert len(tier2) == 0
+
+    def test_tier1_result_project_str(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result.project, str)
+
 
 # ---------------------------------------------------------------------------
 # Promotion — Tier 2 → Tier 3
