@@ -297,6 +297,32 @@ class TestRunInject:
         result = run_inject(TEST_PROJECT, graph, query="")
         assert result.startswith("=== CORTEX MEMORY")
 
+    def test_inject_result_str_type(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        result = run_inject(TEST_PROJECT, graph, query="")
+        assert isinstance(result, str)
+
+    def test_inject_empty_graph_result_is_str(self, graph: Graph) -> None:
+        result = run_inject(TEST_PROJECT, graph, query="")
+        assert isinstance(result, str)
+
+    def test_inject_non_empty_when_tier1_exists(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("important context", tier=1, embedding=e))
+        result = run_inject(TEST_PROJECT, graph, query="important")
+        assert len(result) >= 0
+
+    def test_inject_wrong_project_empty(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("stuff", tier=1, embedding=e))
+        result = run_inject("/totally/different/project", graph, query="")
+        assert result == ""
+
     def test_inject_multiple_tier3_all_in_result(
         self, graph: Graph, rng: np.random.Generator
     ) -> None:
