@@ -324,6 +324,37 @@ class TestEviction:
         result = run_decay(graph, TEST_PROJECT)
         assert result.nodes_evicted >= 0
 
+    def test_eviction_result_project_is_str(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result.project, str)
+
+    def test_other_project_node_survives_eviction(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        other = "/other/project"
+        graph.write_node(_make_node(dummy_embedding, tier=1, project=other, weight=0.1))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=other, tier=1)
+        assert len(nodes) == 1
+
+    def test_tier1_eviction_removes_node_from_graph(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=0.1))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
+        assert len(nodes) == 0
+
+    def test_tier2_eviction_removes_node_from_graph(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=0.1))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        assert len(nodes) == 0
+
 
 # ---------------------------------------------------------------------------
 # Promotion — Tier 1 → Tier 2
