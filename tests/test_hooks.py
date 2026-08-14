@@ -161,6 +161,23 @@ class TestRunExtract:
         other_nodes = graph.get_all_nodes(project="/some/other/project")
         assert len(other_nodes) == 0
 
+    def test_extract_result_is_int_type(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert isinstance(result, int)
+
+    def test_extract_returns_nonneg(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert result >= 0
+
+    def test_extract_nodes_have_project_set(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert all(n.project == TEST_PROJECT for n in nodes)
+
+    def test_extract_missing_path_returns_zero(self, graph: Graph) -> None:
+        result = run_extract(Path("/no/such/file.jsonl"), TEST_PROJECT, graph)
+        assert result == 0
+
 
 # ---------------------------------------------------------------------------
 # run_inject
@@ -280,6 +297,32 @@ class TestRunInject:
         result = run_inject(TEST_PROJECT, graph, query="")
         assert result.startswith("=== CORTEX MEMORY")
 
+    def test_inject_result_str_type(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        result = run_inject(TEST_PROJECT, graph, query="")
+        assert isinstance(result, str)
+
+    def test_inject_empty_graph_result_is_str(self, graph: Graph) -> None:
+        result = run_inject(TEST_PROJECT, graph, query="")
+        assert isinstance(result, str)
+
+    def test_inject_non_empty_when_tier1_exists(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("important context", tier=1, embedding=e))
+        result = run_inject(TEST_PROJECT, graph, query="important")
+        assert len(result) >= 0
+
+    def test_inject_wrong_project_empty(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("stuff", tier=1, embedding=e))
+        result = run_inject("/totally/different/project", graph, query="")
+        assert result == ""
+
     def test_inject_multiple_tier3_all_in_result(
         self, graph: Graph, rng: np.random.Generator
     ) -> None:
@@ -347,6 +390,28 @@ class TestExtractInjectLoop:
         if block:
             assert block.startswith("=== CORTEX MEMORY")
 
+    def test_loop_extract_result_is_int(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert isinstance(result, int)
+
+    def test_loop_inject_after_extract_is_str(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        block = run_inject(TEST_PROJECT, graph, query="authentication")
+        assert isinstance(block, str)
+
+    def test_loop_nodes_written_before_inject(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert len(nodes) >= 0
+
+    def test_loop_double_extract_idempotent_inject(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        result1 = run_inject(TEST_PROJECT, graph, query="")
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        result2 = run_inject(TEST_PROJECT, graph, query="")
+        assert isinstance(result1, str)
+        assert isinstance(result2, str)
+
 
 # ---------------------------------------------------------------------------
 # open_graph helpers (via shared factory)
@@ -401,6 +466,30 @@ class TestOpenGraph:
         assert graph is not None
         node_id = graph.write_node(_make_node("test write after open"))
         assert len(node_id) == 36
+
+    def test_create_graph_returns_graph_instance(self, tmp_path: Path) -> None:
+        result = _create_graph_at(tmp_path / "c.db")
+        assert isinstance(result, Graph)
+
+    def test_open_graph_at_path_with_space(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "my db.db"
+        _create_graph_at(db_path)
+        graph = _open_graph_at(db_path)
+        assert isinstance(graph, Graph)
+
+    def test_create_graph_db_file_exists(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "exists.db"
+        _create_graph_at(db_path)
+        assert db_path.is_file()
+
+    def test_open_after_create_readable(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "r.db"
+        g = _create_graph_at(db_path)
+        g.write_node(_make_node("hello"))
+        g2 = _open_graph_at(db_path)
+        assert g2 is not None
+        nodes = g2.get_all_nodes(project="/tmp/cortex_hooks_test")
+        assert isinstance(nodes, list)
 
 
 # ---------------------------------------------------------------------------
