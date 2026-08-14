@@ -1627,6 +1627,29 @@ class TestGetNodesBySource:
         assert len(ast_nodes) == 1
         assert ast_nodes[0].text == "ast fact"
 
+    def test_returns_list_type(self, graph: Graph) -> None:
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
+        assert isinstance(result, list)
+
+    def test_node_source_field_matches(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="x", source="git"))
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="git")
+        assert result[0].source == "git"
+
+    def test_no_tier_filter_returns_all_tiers(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="t1", source="nlp", tier=1))
+        graph.write_node(_make_node(dummy_embedding, text="t2", source="nlp", tier=2))
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
+        assert len(result) == 2
+
+    def test_empty_source_returns_empty(self, graph: Graph) -> None:
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="nonexistent_src")
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # update_node_rationale
