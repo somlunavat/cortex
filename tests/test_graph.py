@@ -1627,6 +1627,29 @@ class TestGetNodesBySource:
         assert len(ast_nodes) == 1
         assert ast_nodes[0].text == "ast fact"
 
+    def test_returns_list_type(self, graph: Graph) -> None:
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
+        assert isinstance(result, list)
+
+    def test_node_source_field_matches(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="x", source="git"))
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="git")
+        assert result[0].source == "git"
+
+    def test_no_tier_filter_returns_all_tiers(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="t1", source="nlp", tier=1))
+        graph.write_node(_make_node(dummy_embedding, text="t2", source="nlp", tier=2))
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="nlp")
+        assert len(result) == 2
+
+    def test_empty_source_returns_empty(self, graph: Graph) -> None:
+        result = graph.get_nodes_by_source(TEST_PROJECT, source="nonexistent_src")
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # update_node_rationale
@@ -2346,6 +2369,32 @@ class TestGetRecentNodes:
         assert len(recent) == 1
         assert recent[0].text == "mine"
 
+    def test_recent_nodes_returns_list(self, graph: Graph) -> None:
+        result = graph.get_recent_nodes(TEST_PROJECT)
+        assert isinstance(result, list)
+
+    def test_recent_nodes_limit_one(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(5):
+            graph.write_node(_make_node(dummy_embedding, text=f"node{i}"))
+        result = graph.get_recent_nodes(TEST_PROJECT, limit=1)
+        assert len(result) == 1
+
+    def test_recent_nodes_node_has_text_attr(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="hello"))
+        result = graph.get_recent_nodes(TEST_PROJECT)
+        assert hasattr(result[0], "text")
+
+    def test_recent_nodes_project_field_matches(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="check"))
+        result = graph.get_recent_nodes(TEST_PROJECT)
+        assert result[0].project == TEST_PROJECT
+
 
 # ---------------------------------------------------------------------------
 # get_aggregate_stats
@@ -2466,6 +2515,22 @@ class TestGetAggregateStats:
         result = graph.get_aggregate_stats(TEST_PROJECT)
         assert "total_written" in result
 
+    def test_aggregate_stats_session_count_is_int(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert isinstance(result["session_count"], int)
+
+    def test_aggregate_stats_has_tier_counts_key(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert "tier_counts" in result
+
+    def test_aggregate_stats_total_written_nonneg(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert result["total_written"] >= 0
+
+    def test_aggregate_stats_session_count_nonneg(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert result["session_count"] >= 0
+
 
 # ---------------------------------------------------------------------------
 # query_nodes_page
@@ -2563,6 +2628,36 @@ class TestQueryNodesPage:
     def test_query_nodes_page_first_element_is_list(self, graph: Graph) -> None:
         nodes, _total = graph.query_nodes_page(TEST_PROJECT)
         assert isinstance(nodes, list)
+
+    def test_tier_filter_limits_results(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="t1", tier=1))
+        graph.write_node(_make_node(dummy_embedding, text="t2", tier=2))
+        nodes, total = graph.query_nodes_page(TEST_PROJECT, tier=1)
+        assert total == 1
+        assert nodes[0].tier == 1
+
+    def test_multiple_nodes_total_accurate(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        for i in range(4):
+            graph.write_node(_make_node(dummy_embedding, text=f"n{i}", weight=float(i)))
+        _nodes, total = graph.query_nodes_page(TEST_PROJECT)
+        assert total == 4
+
+    def test_returned_nodes_are_node_instances(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, text="x"))
+        from core.graph import Node
+
+        nodes, _ = graph.query_nodes_page(TEST_PROJECT)
+        assert isinstance(nodes[0], Node)
+
+    def test_total_nonneg_empty(self, graph: Graph) -> None:
+        _, total = graph.query_nodes_page(TEST_PROJECT)
+        assert total >= 0
 
 
 # ---------------------------------------------------------------------------
