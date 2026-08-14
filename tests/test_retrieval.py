@@ -679,6 +679,35 @@ class TestRetrieve:
         texts = [n.text for n in result]
         assert any("unique fact about asyncpg" in t for t in texts)
 
+    def test_retrieve_empty_query_returns_list(self, graph: Graph) -> None:
+        result = retrieve("", TEST_PROJECT, graph)
+        assert isinstance(result, list)
+
+    def test_retrieve_result_nodes_are_node_instances(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("test node", tier=1, embedding=e))
+        result = retrieve("test", TEST_PROJECT, graph)
+        for n in result:
+            assert isinstance(n, Node)
+
+    def test_retrieve_single_tier3_always_included(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("permanent convention", tier=3, embedding=e))
+        result = retrieve("unrelated query xyz", TEST_PROJECT, graph)
+        assert len(result) >= 1
+
+    def test_retrieve_wrong_project_returns_empty(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        graph.write_node(_make_node("data", project=TEST_PROJECT, embedding=e))
+        result = retrieve("query", "/completely/different", graph)
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # format_injection_block
@@ -858,6 +887,35 @@ class TestFormatInjectionBlock:
         nodes = [_make_node("end check", tier=1, embedding=e)]
         block = format_injection_block(nodes, TEST_PROJECT)
         assert block.endswith("===")
+
+    def test_returns_str_for_empty_list(self) -> None:
+        block = format_injection_block([], TEST_PROJECT)
+        assert isinstance(block, str)
+
+    def test_multiple_tier1_nodes_all_appear(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [
+            _make_node("fact alpha", tier=1, embedding=e),
+            _make_node("fact beta", tier=1, embedding=e),
+        ]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "fact alpha" in block
+        assert "fact beta" in block
+
+    def test_block_contains_project_path_str(self) -> None:
+        block = format_injection_block([], TEST_PROJECT)
+        assert isinstance(TEST_PROJECT, str)
+        assert TEST_PROJECT in block
+
+    def test_tier3_and_tier1_both_in_block(self, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        nodes = [
+            _make_node("convention text", tier=3, embedding=e),
+            _make_node("context text", tier=1, embedding=e),
+        ]
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert "convention text" in block
+        assert "context text" in block
 
 
 # ---------------------------------------------------------------------------
@@ -1070,6 +1128,34 @@ class TestFormatNodeLine:
         line = _format_node_line(node)
         assert line.startswith("•")
 
+    def test_returns_str_type(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("some text", None)
+        result = _format_node_line(node)
+        assert isinstance(result, str)
+
+    def test_text_included_in_line(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("specific content here", None)
+        line = _format_node_line(node)
+        assert "specific content here" in line
+
+    def test_rationale_format_has_opening_paren(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("fact", "reason for it")
+        line = _format_node_line(node)
+        assert "(" in line
+
+    def test_no_rationale_no_parens(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("fact without reason", None)
+        line = _format_node_line(node)
+        assert "(" not in line
+
 
 # ---------------------------------------------------------------------------
 # count_tokens
@@ -1109,3 +1195,24 @@ class TestCountTokens:
         from core.retrieval import count_tokens
 
         assert count_tokens("the quick brown fox") > count_tokens("the")
+
+    def test_whitespace_only_returns_nonneg(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("   ") >= 0
+
+    def test_multiline_text_returns_int(self) -> None:
+        from core.retrieval import count_tokens
+
+        result = count_tokens("line one\nline two\nline three")
+        assert isinstance(result, int)
+
+    def test_unicode_text_returns_nonneg(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("héllo wörld") >= 0
+
+    def test_repeated_word_more_tokens_than_one(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("hello hello hello hello") > count_tokens("hello")
