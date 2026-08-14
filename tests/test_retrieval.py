@@ -1070,6 +1070,34 @@ class TestFormatNodeLine:
         line = _format_node_line(node)
         assert line.startswith("•")
 
+    def test_returns_str_type(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("some text", None)
+        result = _format_node_line(node)
+        assert isinstance(result, str)
+
+    def test_text_included_in_line(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("specific content here", None)
+        line = _format_node_line(node)
+        assert "specific content here" in line
+
+    def test_rationale_format_has_opening_paren(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("fact", "reason for it")
+        line = _format_node_line(node)
+        assert "(" in line
+
+    def test_no_rationale_no_parens(self) -> None:
+        from core.retrieval import _format_node_line
+
+        node = self._node_with_rationale("fact without reason", None)
+        line = _format_node_line(node)
+        assert "(" not in line
+
 
 # ---------------------------------------------------------------------------
 # count_tokens
