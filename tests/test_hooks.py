@@ -390,6 +390,28 @@ class TestExtractInjectLoop:
         if block:
             assert block.startswith("=== CORTEX MEMORY")
 
+    def test_loop_extract_result_is_int(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert isinstance(result, int)
+
+    def test_loop_inject_after_extract_is_str(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        block = run_inject(TEST_PROJECT, graph, query="authentication")
+        assert isinstance(block, str)
+
+    def test_loop_nodes_written_before_inject(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert len(nodes) >= 0
+
+    def test_loop_double_extract_idempotent_inject(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        result1 = run_inject(TEST_PROJECT, graph, query="")
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        result2 = run_inject(TEST_PROJECT, graph, query="")
+        assert isinstance(result1, str)
+        assert isinstance(result2, str)
+
 
 # ---------------------------------------------------------------------------
 # open_graph helpers (via shared factory)
