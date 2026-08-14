@@ -2515,6 +2515,22 @@ class TestGetAggregateStats:
         result = graph.get_aggregate_stats(TEST_PROJECT)
         assert "total_written" in result
 
+    def test_aggregate_stats_session_count_is_int(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert isinstance(result["session_count"], int)
+
+    def test_aggregate_stats_has_tier_counts_key(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert "tier_counts" in result
+
+    def test_aggregate_stats_total_written_nonneg(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert result["total_written"] >= 0
+
+    def test_aggregate_stats_session_count_nonneg(self, graph: Graph) -> None:
+        result = graph.get_aggregate_stats(TEST_PROJECT)
+        assert result["session_count"] >= 0
+
 
 # ---------------------------------------------------------------------------
 # query_nodes_page
