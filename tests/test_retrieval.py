@@ -1137,3 +1137,24 @@ class TestCountTokens:
         from core.retrieval import count_tokens
 
         assert count_tokens("the quick brown fox") > count_tokens("the")
+
+    def test_whitespace_only_returns_nonneg(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("   ") >= 0
+
+    def test_multiline_text_returns_int(self) -> None:
+        from core.retrieval import count_tokens
+
+        result = count_tokens("line one\nline two\nline three")
+        assert isinstance(result, int)
+
+    def test_unicode_text_returns_nonneg(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("héllo wörld") >= 0
+
+    def test_repeated_word_more_tokens_than_one(self) -> None:
+        from core.retrieval import count_tokens
+
+        assert count_tokens("hello hello hello hello") > count_tokens("hello")
