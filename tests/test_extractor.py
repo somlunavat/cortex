@@ -1214,3 +1214,52 @@ class TestCandidateNodeFields:
     def test_source_field_preserved(self) -> None:
         node = self._make_node(source=SourceType.AST)
         assert node.source == SourceType.AST
+
+
+# ---------------------------------------------------------------------------
+# Enum string values — NodeType, SourceType, ScopeType
+# ---------------------------------------------------------------------------
+
+
+class TestEnumValues:
+    def test_node_type_observation_value(self) -> None:
+        assert NodeType.OBSERVATION == "observation"
+
+    def test_node_type_fact_value(self) -> None:
+        assert NodeType.FACT == "fact"
+
+    def test_node_type_convention_value(self) -> None:
+        assert NodeType.CONVENTION == "convention"
+
+    def test_node_type_error_value(self) -> None:
+        assert NodeType.ERROR == "error"
+
+    def test_source_type_jsonl_value(self) -> None:
+        assert SourceType.JSONL == "jsonl"
+
+    def test_source_type_ast_value(self) -> None:
+        assert SourceType.AST == "ast"
+
+    def test_source_type_git_value(self) -> None:
+        assert SourceType.GIT == "git"
+
+    def test_source_type_nlp_value(self) -> None:
+        assert SourceType.NLP == "nlp"
+
+    def test_scope_type_session_value(self) -> None:
+        assert ScopeType.SESSION == "session"
+
+    def test_scope_type_module_value(self) -> None:
+        assert ScopeType.MODULE == "module"
+
+    def test_scope_type_project_value(self) -> None:
+        assert ScopeType.PROJECT == "project"
+
+    def test_all_node_types_are_strings(self) -> None:
+        assert all(isinstance(n, str) for n in NodeType)
+
+    def test_all_source_types_are_strings(self) -> None:
+        assert all(isinstance(s, str) for s in SourceType)
+
+    def test_all_scope_types_are_strings(self) -> None:
+        assert all(isinstance(s, str) for s in ScopeType)
