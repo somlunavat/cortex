@@ -69,6 +69,17 @@ class CandidateNode:
 DURABILITY_THRESHOLD = 0.4
 MAX_TEXT_LENGTH = 200
 
+# Durability score adjustments applied by _score_durability
+_DURABILITY_BASE = 0.5
+_DURABILITY_BOOST_CONVENTION = 0.3
+_DURABILITY_BOOST_ALWAYS = 0.2
+_DURABILITY_BOOST_NEVER = 0.2
+_DURABILITY_BOOST_NAMED_ENTITY = 0.1
+_DURABILITY_PENALTY_MAYBE = 0.3
+_DURABILITY_PENALTY_TEMPORARY = 0.4
+_DURABILITY_PENALTY_FOR_NOW = 0.3
+_DURABILITY_PENALTY_THIS_SESSION = 0.4
+
 # ---------------------------------------------------------------------------
 # Channel 1: JSONL signals
 # ---------------------------------------------------------------------------
@@ -505,25 +516,25 @@ def _is_convention_sentence(sent: Any) -> bool:
 def _score_durability(sent: Any, node_type: NodeType) -> float:
     """Compute durability score for a sentence using rule-based heuristics."""
     text_lower = sent.text.lower()
-    score = 0.5
+    score = _DURABILITY_BASE
 
     if node_type == NodeType.CONVENTION:
-        score += 0.3
+        score += _DURABILITY_BOOST_CONVENTION
     if "always" in text_lower:
-        score += 0.2
+        score += _DURABILITY_BOOST_ALWAYS
     if "never" in text_lower:
-        score += 0.2
+        score += _DURABILITY_BOOST_NEVER
     if any(ent.label_ in ("ORG", "PRODUCT") for ent in sent.ents):
-        score += 0.1
+        score += _DURABILITY_BOOST_NAMED_ENTITY
 
     if "maybe" in text_lower:
-        score -= 0.3
+        score -= _DURABILITY_PENALTY_MAYBE
     if "temporary" in text_lower:
-        score -= 0.4
+        score -= _DURABILITY_PENALTY_TEMPORARY
     if "for now" in text_lower:
-        score -= 0.3
+        score -= _DURABILITY_PENALTY_FOR_NOW
     if "this session" in text_lower:
-        score -= 0.4
+        score -= _DURABILITY_PENALTY_THIS_SESSION
 
     return max(0.0, min(1.0, score))
 
