@@ -8,6 +8,7 @@ import pytest
 
 from core.extractor import (
     DURABILITY_THRESHOLD,
+    CandidateNode,
     NodeType,
     ScopeType,
     SourceType,
@@ -1169,3 +1170,47 @@ class TestJsonlChannelEdgeCases:
         candidates = jsonl_channel(events, TEST_PROJECT)
         obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
         assert len(obs) == 1
+
+
+# ---------------------------------------------------------------------------
+# CandidateNode — field types and values
+# ---------------------------------------------------------------------------
+
+
+class TestCandidateNodeFields:
+    def _make_node(self, **kwargs: object) -> CandidateNode:
+        defaults: dict[str, object] = {
+            "text": "some text",
+            "rationale": None,
+            "type": NodeType.FACT,
+            "source": SourceType.NLP,
+            "scope": ScopeType.PROJECT,
+            "durability": 0.7,
+            "project": TEST_PROJECT,
+        }
+        defaults.update(kwargs)
+        return CandidateNode(**defaults)  # type: ignore[arg-type]
+
+    def test_text_field_is_str(self) -> None:
+        node = self._make_node()
+        assert isinstance(node.text, str)
+
+    def test_rationale_none_by_default(self) -> None:
+        node = self._make_node()
+        assert node.rationale is None
+
+    def test_rationale_can_be_string(self) -> None:
+        node = self._make_node(rationale="because performance")
+        assert node.rationale == "because performance"
+
+    def test_durability_is_float(self) -> None:
+        node = self._make_node(durability=0.65)
+        assert isinstance(node.durability, float)
+
+    def test_project_field_preserved(self) -> None:
+        node = self._make_node(project="/my/project")
+        assert node.project == "/my/project"
+
+    def test_source_field_preserved(self) -> None:
+        node = self._make_node(source=SourceType.AST)
+        assert node.source == SourceType.AST
