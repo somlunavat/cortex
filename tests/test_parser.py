@@ -326,6 +326,69 @@ class TestDataNormalization:
 
 
 # ---------------------------------------------------------------------------
+# parse_transcript — edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestParseTranscriptEdgeCases:
+    def test_empty_file_returns_no_events(self, tmp_path: Path) -> None:
+        p = tmp_path / "empty.jsonl"
+        p.write_text("")
+        events = list(parse_transcript(p))
+        assert events == []
+
+    def test_missing_timestamp_defaults_to_zero(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [{"type": "session_start", "session_id": "s1", "data": {}}],
+        )
+        events = list(parse_transcript(p))
+        assert len(events) == 1
+        assert events[0].timestamp == 0
+
+    def test_missing_session_id_defaults_to_empty_string(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [{"type": "session_start", "timestamp": 1, "data": {}}],
+        )
+        events = list(parse_transcript(p))
+        assert len(events) == 1
+        assert events[0].session_id == ""
+
+    def test_missing_data_key_defaults_to_empty_dict(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [{"type": "session_start", "timestamp": 1, "session_id": "s1"}],
+        )
+        events = list(parse_transcript(p))
+        assert len(events) == 1
+        assert events[0].data == {}
+
+    def test_timestamp_stored_as_int(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [
+                {
+                    "type": "session_start",
+                    "timestamp": 42,
+                    "session_id": "s1",
+                    "data": {},
+                }
+            ],
+        )
+        events = list(parse_transcript(p))
+        assert isinstance(events[0].timestamp, int)
+
+    def test_all_whitespace_line_skipped(self, tmp_path: Path) -> None:
+        p = tmp_path / "ws.jsonl"
+        p.write_text(
+            '   \n{"type": "session_start", "timestamp": 1, "session_id": "s1", "data": {}}\n   \n'
+        )
+        events = list(parse_transcript(p))
+        assert len(events) == 1
+
+
+# ---------------------------------------------------------------------------
 # detect_hotspots
 # ---------------------------------------------------------------------------
 
@@ -828,3 +891,115 @@ class TestSummarizeSession:
         events = [_make_event(EventType.ASSISTANT_MESSAGE, data={"text": text})]
         summary = summarize_session(events)
         assert text in summary.prose_turns
+
+    def test_summarize_session_empty_events_has_empty_session_id(self) -> None:
+        summary = summarize_session([])
+        assert summary.session_id == ""
+
+    def test_summarize_session_hotspot_files_is_frozenset(self) -> None:
+        summary = summarize_session([])
+        assert isinstance(summary.hotspot_files, frozenset)
+
+    def test_summarize_session_co_occurring_pairs_is_tuple(self) -> None:
+        summary = summarize_session([])
+        assert isinstance(summary.co_occurring_pairs, tuple)
+
+    def test_summarize_session_prose_turns_is_tuple(self) -> None:
+        summary = summarize_session([])
+        assert isinstance(summary.prose_turns, tuple)
+
+    def test_summarize_session_session_id_from_first_event(self) -> None:
+        events = [
+            _make_event(EventType.BASH_SUCCESS, session_id="abc123"),
+            _make_event(
+                EventType.FILE_WRITE, data={"path": "/tmp/f.py"}, session_id="abc123"
+            ),
+        ]
+        summary = summarize_session(events)
+        assert summary.session_id == "abc123"
+
+    def test_summarize_session_bash_failures_are_tuple(self) -> None:
+        events = [_make_event(EventType.BASH_FAILURE)]
+        summary = summarize_session(events)
+        assert isinstance(summary.bash_failures, tuple)
+
+    def test_summarize_session_bash_failures_count(self) -> None:
+        events = [
+            _make_event(EventType.BASH_FAILURE),
+            _make_event(EventType.BASH_FAILURE),
+        ]
+        summary = summarize_session(events)
+        assert len(summary.bash_failures) == 2
+
+    def test_summarize_session_co_occurring_pairs_populated(self) -> None:
+        events = [
+            _make_write_event("/proj/a.py", timestamp=0),
+            _make_write_event("/proj/b.py", timestamp=5),
+        ]
+        summary = summarize_session(events)
+        assert len(summary.co_occurring_pairs) == 1
+
+    def test_summarize_session_hotspot_file_count(self) -> None:
+        events = [
+            _make_write_event("/proj/a.py", ts) for ts in range(HOTSPOT_WRITE_THRESHOLD)
+        ] + [
+            _make_write_event("/proj/b.py", ts + 100)
+            for ts in range(HOTSPOT_WRITE_THRESHOLD)
+        ]
+        summary = summarize_session(events)
+        assert len(summary.hotspot_files) == 2
+
+    def test_summarize_session_prose_turns_length(self) -> None:
+        events = [
+            _make_event(EventType.ASSISTANT_MESSAGE, data={"text": f"turn {i}"})
+            for i in range(3)
+        ]
+        summary = summarize_session(events)
+        assert len(summary.prose_turns) == 3
+
+    def test_summarize_session_no_hotspot_below_threshold(self) -> None:
+        events = [
+            _make_write_event("/proj/x.py", ts)
+            for ts in range(HOTSPOT_WRITE_THRESHOLD - 1)
+        ]
+        summary = summarize_session(events)
+        assert len(summary.hotspot_files) == 0
+
+    def test_summarize_session_mixed_events_session_id(self) -> None:
+        events = [
+            _make_event(EventType.BASH_SUCCESS, session_id="zz99"),
+            _make_event(
+                EventType.ASSISTANT_MESSAGE, data={"text": "hi"}, session_id="zz99"
+            ),
+        ]
+        summary = summarize_session(events)
+        assert summary.session_id == "zz99"
+
+
+# ---------------------------------------------------------------------------
+# EventType — enum value coverage
+# ---------------------------------------------------------------------------
+
+
+class TestEventTypeValues:
+    def test_file_read_value(self) -> None:
+        assert EventType.FILE_READ == "file_read"
+
+    def test_file_write_value(self) -> None:
+        assert EventType.FILE_WRITE == "file_write"
+
+    def test_bash_failure_value(self) -> None:
+        assert EventType.BASH_FAILURE == "bash_failure"
+
+    def test_assistant_message_value(self) -> None:
+        assert EventType.ASSISTANT_MESSAGE == "assistant_message"
+
+    def test_session_start_value(self) -> None:
+        assert EventType.SESSION_START == "session_start"
+
+    def test_event_type_is_str(self) -> None:
+        assert isinstance(EventType.FILE_WRITE, str)
+
+    def test_all_event_types_have_unique_values(self) -> None:
+        values = [e.value for e in EventType]
+        assert len(values) == len(set(values))
