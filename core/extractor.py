@@ -14,7 +14,13 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from core.parser import EventType, ParsedEvent
+from core.parser import (
+    EventType,
+    ParsedEvent,
+)
+from core.parser import (
+    extract_prose_turns as _parse_prose_turns,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -649,15 +655,6 @@ def _infer_touched_files(events: list[ParsedEvent]) -> list[Path]:
     return result
 
 
-def _extract_prose_turns(events: list[ParsedEvent]) -> list[str]:
-    """Return text from assistant_message events in order."""
-    return [
-        str(e.data.get("text", ""))
-        for e in events
-        if e.type == EventType.ASSISTANT_MESSAGE and e.data.get("text")
-    ]
-
-
 def run_extraction(
     events: list[ParsedEvent],
     project: str,
@@ -679,7 +676,7 @@ def run_extraction(
         Merged list of CandidateNode objects, deduplicated by text.
     """
     files = touched_files if touched_files is not None else _infer_touched_files(events)
-    prose_turns = _extract_prose_turns(events)
+    prose_turns = list(_parse_prose_turns(events))
 
     all_candidates: list[CandidateNode] = [
         *jsonl_channel(events, project),
