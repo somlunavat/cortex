@@ -8,6 +8,7 @@ import pytest
 
 from core.extractor import (
     DURABILITY_THRESHOLD,
+    CandidateNode,
     NodeType,
     ScopeType,
     SourceType,
@@ -1169,3 +1170,135 @@ class TestJsonlChannelEdgeCases:
         candidates = jsonl_channel(events, TEST_PROJECT)
         obs = [c for c in candidates if c.type == NodeType.OBSERVATION]
         assert len(obs) == 1
+
+
+# ---------------------------------------------------------------------------
+# CandidateNode — field types and values
+# ---------------------------------------------------------------------------
+
+
+class TestCandidateNodeFields:
+    def _make_node(self, **kwargs: object) -> CandidateNode:
+        defaults: dict[str, object] = {
+            "text": "some text",
+            "rationale": None,
+            "type": NodeType.FACT,
+            "source": SourceType.NLP,
+            "scope": ScopeType.PROJECT,
+            "durability": 0.7,
+            "project": TEST_PROJECT,
+        }
+        defaults.update(kwargs)
+        return CandidateNode(**defaults)  # type: ignore[arg-type]
+
+    def test_text_field_is_str(self) -> None:
+        node = self._make_node()
+        assert isinstance(node.text, str)
+
+    def test_rationale_none_by_default(self) -> None:
+        node = self._make_node()
+        assert node.rationale is None
+
+    def test_rationale_can_be_string(self) -> None:
+        node = self._make_node(rationale="because performance")
+        assert node.rationale == "because performance"
+
+    def test_durability_is_float(self) -> None:
+        node = self._make_node(durability=0.65)
+        assert isinstance(node.durability, float)
+
+    def test_project_field_preserved(self) -> None:
+        node = self._make_node(project="/my/project")
+        assert node.project == "/my/project"
+
+    def test_source_field_preserved(self) -> None:
+        node = self._make_node(source=SourceType.AST)
+        assert node.source == SourceType.AST
+
+
+# ---------------------------------------------------------------------------
+# Enum string values — NodeType, SourceType, ScopeType
+# ---------------------------------------------------------------------------
+
+
+class TestEnumValues:
+    def test_node_type_observation_value(self) -> None:
+        assert NodeType.OBSERVATION == "observation"
+
+    def test_node_type_fact_value(self) -> None:
+        assert NodeType.FACT == "fact"
+
+    def test_node_type_convention_value(self) -> None:
+        assert NodeType.CONVENTION == "convention"
+
+    def test_node_type_error_value(self) -> None:
+        assert NodeType.ERROR == "error"
+
+    def test_source_type_jsonl_value(self) -> None:
+        assert SourceType.JSONL == "jsonl"
+
+    def test_source_type_ast_value(self) -> None:
+        assert SourceType.AST == "ast"
+
+    def test_source_type_git_value(self) -> None:
+        assert SourceType.GIT == "git"
+
+    def test_source_type_nlp_value(self) -> None:
+        assert SourceType.NLP == "nlp"
+
+    def test_scope_type_session_value(self) -> None:
+        assert ScopeType.SESSION == "session"
+
+    def test_scope_type_module_value(self) -> None:
+        assert ScopeType.MODULE == "module"
+
+    def test_scope_type_project_value(self) -> None:
+        assert ScopeType.PROJECT == "project"
+
+    def test_all_node_types_are_strings(self) -> None:
+        assert all(isinstance(n, str) for n in NodeType)
+
+    def test_all_source_types_are_strings(self) -> None:
+        assert all(isinstance(s, str) for s in SourceType)
+
+    def test_all_scope_types_are_strings(self) -> None:
+        assert all(isinstance(s, str) for s in ScopeType)
+
+
+# ---------------------------------------------------------------------------
+# run_extraction — integration smoke tests
+# ---------------------------------------------------------------------------
+
+
+class TestRunExtractionIntegration:
+    def test_empty_events_returns_list(self) -> None:
+        result = run_extraction([], TEST_PROJECT)
+        assert isinstance(result, list)
+
+    def test_bash_failure_event_produces_candidate(self) -> None:
+        events = [
+            _failure_event(command="pytest", exit_code=1, output="Error: test failed")
+        ]
+        result = run_extraction(events, TEST_PROJECT)
+        errors = [c for c in result if c.type == NodeType.ERROR]
+        assert len(errors) == 1
+
+    def test_all_candidates_above_durability_threshold(self) -> None:
+        events = [_failure_event()]
+        result = run_extraction(events, TEST_PROJECT)
+        assert all(c.durability >= DURABILITY_THRESHOLD for c in result)
+
+    def test_hotspot_events_produce_observation(self) -> None:
+        events = [_write_event(f"{TEST_PROJECT}/busy.py", ts) for ts in range(3)]
+        result = run_extraction(events, TEST_PROJECT)
+        observations = [c for c in result if c.type == NodeType.OBSERVATION]
+        assert len(observations) == 1
+
+    def test_candidates_have_project_set(self) -> None:
+        events = [_failure_event()]
+        result = run_extraction(events, TEST_PROJECT)
+        assert all(c.project == TEST_PROJECT for c in result)
+
+    def test_explicit_touched_files_overrides_inferred(self) -> None:
+        result = run_extraction([], TEST_PROJECT, touched_files=[])
+        assert isinstance(result, list)
