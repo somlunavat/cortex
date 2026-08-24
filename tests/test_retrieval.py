@@ -1313,3 +1313,59 @@ class TestVectorChannelScoreRange:
         nodes = [_make_node("test", embedding=rng.random(384).astype(np.float32))]
         result = vector_channel(emb, nodes)
         assert all(isinstance(sn.score, float) for sn in result)
+
+
+# ---------------------------------------------------------------------------
+# graph_channel — hop score values
+# ---------------------------------------------------------------------------
+
+
+class TestGraphChannelHopValues:
+    def test_hop1_score_is_half(self, graph: Graph, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        seed_id = graph.write_node(_make_node("seed text", embedding=e))
+        nb_id = graph.write_node(_make_node("neighbor text", embedding=e))
+        graph.write_edge(seed_id, nb_id)
+        seed_node = graph.get_node(seed_id)
+        nb_node = graph.get_node(nb_id)
+        assert seed_node and nb_node
+        result = graph_channel([seed_node], graph, [seed_node, nb_node])
+        nb_sn = next(sn for sn in result if sn.node.id == nb_id)
+        assert nb_sn.score == pytest.approx(0.5, abs=1e-6)
+
+    def test_isolated_node_scores_zero(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        seed_id = graph.write_node(_make_node("seed", embedding=e))
+        iso_id = graph.write_node(_make_node("isolated", embedding=e))
+        seed_node = graph.get_node(seed_id)
+        iso_node = graph.get_node(iso_id)
+        assert seed_node and iso_node
+        result = graph_channel([seed_node], graph, [seed_node, iso_node])
+        iso_sn = next(sn for sn in result if sn.node.id == iso_id)
+        assert iso_sn.score == 0.0
+
+    def test_all_scores_are_floats(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        n1_id = graph.write_node(_make_node("node one", embedding=e))
+        n2_id = graph.write_node(_make_node("node two", embedding=e))
+        graph.write_edge(n1_id, n2_id)
+        n1 = graph.get_node(n1_id)
+        n2 = graph.get_node(n2_id)
+        assert n1 and n2
+        result = graph_channel([n1], graph, [n1, n2])
+        assert all(isinstance(sn.score, float) for sn in result)
+
+    def test_result_count_matches_all_nodes(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        ids = [graph.write_node(_make_node(t, embedding=e)) for t in ("a", "b", "c")]
+        nodes = [graph.get_node(nid) for nid in ids]
+        valid = [n for n in nodes if n is not None]
+        assert len(valid) == 3
+        result = graph_channel([valid[0]], graph, valid)
+        assert len(result) == 3
