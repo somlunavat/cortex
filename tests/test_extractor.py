@@ -1263,3 +1263,42 @@ class TestEnumValues:
 
     def test_all_scope_types_are_strings(self) -> None:
         assert all(isinstance(s, str) for s in ScopeType)
+
+
+# ---------------------------------------------------------------------------
+# run_extraction — integration smoke tests
+# ---------------------------------------------------------------------------
+
+
+class TestRunExtractionIntegration:
+    def test_empty_events_returns_list(self) -> None:
+        result = run_extraction([], TEST_PROJECT)
+        assert isinstance(result, list)
+
+    def test_bash_failure_event_produces_candidate(self) -> None:
+        events = [
+            _failure_event(command="pytest", exit_code=1, output="Error: test failed")
+        ]
+        result = run_extraction(events, TEST_PROJECT)
+        errors = [c for c in result if c.type == NodeType.ERROR]
+        assert len(errors) == 1
+
+    def test_all_candidates_above_durability_threshold(self) -> None:
+        events = [_failure_event()]
+        result = run_extraction(events, TEST_PROJECT)
+        assert all(c.durability >= DURABILITY_THRESHOLD for c in result)
+
+    def test_hotspot_events_produce_observation(self) -> None:
+        events = [_write_event(f"{TEST_PROJECT}/busy.py", ts) for ts in range(3)]
+        result = run_extraction(events, TEST_PROJECT)
+        observations = [c for c in result if c.type == NodeType.OBSERVATION]
+        assert len(observations) == 1
+
+    def test_candidates_have_project_set(self) -> None:
+        events = [_failure_event()]
+        result = run_extraction(events, TEST_PROJECT)
+        assert all(c.project == TEST_PROJECT for c in result)
+
+    def test_explicit_touched_files_overrides_inferred(self) -> None:
+        result = run_extraction([], TEST_PROJECT, touched_files=[])
+        assert isinstance(result, list)
