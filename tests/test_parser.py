@@ -326,6 +326,69 @@ class TestDataNormalization:
 
 
 # ---------------------------------------------------------------------------
+# parse_transcript — edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestParseTranscriptEdgeCases:
+    def test_empty_file_returns_no_events(self, tmp_path: Path) -> None:
+        p = tmp_path / "empty.jsonl"
+        p.write_text("")
+        events = list(parse_transcript(p))
+        assert events == []
+
+    def test_missing_timestamp_defaults_to_zero(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [{"type": "session_start", "session_id": "s1", "data": {}}],
+        )
+        events = list(parse_transcript(p))
+        assert len(events) == 1
+        assert events[0].timestamp == 0
+
+    def test_missing_session_id_defaults_to_empty_string(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [{"type": "session_start", "timestamp": 1, "data": {}}],
+        )
+        events = list(parse_transcript(p))
+        assert len(events) == 1
+        assert events[0].session_id == ""
+
+    def test_missing_data_key_defaults_to_empty_dict(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [{"type": "session_start", "timestamp": 1, "session_id": "s1"}],
+        )
+        events = list(parse_transcript(p))
+        assert len(events) == 1
+        assert events[0].data == {}
+
+    def test_timestamp_stored_as_int(self, tmp_path: Path) -> None:
+        p = _write_jsonl(
+            tmp_path,
+            [
+                {
+                    "type": "session_start",
+                    "timestamp": 42,
+                    "session_id": "s1",
+                    "data": {},
+                }
+            ],
+        )
+        events = list(parse_transcript(p))
+        assert isinstance(events[0].timestamp, int)
+
+    def test_all_whitespace_line_skipped(self, tmp_path: Path) -> None:
+        p = tmp_path / "ws.jsonl"
+        p.write_text(
+            '   \n{"type": "session_start", "timestamp": 1, "session_id": "s1", "data": {}}\n   \n'
+        )
+        events = list(parse_transcript(p))
+        assert len(events) == 1
+
+
+# ---------------------------------------------------------------------------
 # detect_hotspots
 # ---------------------------------------------------------------------------
 
