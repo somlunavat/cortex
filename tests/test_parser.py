@@ -828,3 +828,42 @@ class TestSummarizeSession:
         events = [_make_event(EventType.ASSISTANT_MESSAGE, data={"text": text})]
         summary = summarize_session(events)
         assert text in summary.prose_turns
+
+    def test_summarize_session_empty_events_has_empty_session_id(self) -> None:
+        summary = summarize_session([])
+        assert summary.session_id == ""
+
+    def test_summarize_session_hotspot_files_is_frozenset(self) -> None:
+        summary = summarize_session([])
+        assert isinstance(summary.hotspot_files, frozenset)
+
+    def test_summarize_session_co_occurring_pairs_is_tuple(self) -> None:
+        summary = summarize_session([])
+        assert isinstance(summary.co_occurring_pairs, tuple)
+
+    def test_summarize_session_prose_turns_is_tuple(self) -> None:
+        summary = summarize_session([])
+        assert isinstance(summary.prose_turns, tuple)
+
+    def test_summarize_session_session_id_from_first_event(self) -> None:
+        events = [
+            _make_event(EventType.BASH_SUCCESS, session_id="abc123"),
+            _make_event(
+                EventType.FILE_WRITE, data={"path": "/tmp/f.py"}, session_id="abc123"
+            ),
+        ]
+        summary = summarize_session(events)
+        assert summary.session_id == "abc123"
+
+    def test_summarize_session_bash_failures_are_tuple(self) -> None:
+        events = [_make_event(EventType.BASH_FAILURE)]
+        summary = summarize_session(events)
+        assert isinstance(summary.bash_failures, tuple)
+
+    def test_summarize_session_bash_failures_count(self) -> None:
+        events = [
+            _make_event(EventType.BASH_FAILURE),
+            _make_event(EventType.BASH_FAILURE),
+        ]
+        summary = summarize_session(events)
+        assert len(summary.bash_failures) == 2
