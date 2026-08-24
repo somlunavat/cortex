@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from core.parser import (
+    HOTSPOT_WRITE_THRESHOLD,
     EventType,
     ParsedEvent,
 )
@@ -110,7 +111,7 @@ def jsonl_channel(events: list[ParsedEvent], project: str) -> list[CandidateNode
                 write_counts[path] += 1
 
     for path, count in write_counts.items():
-        if count >= 3:
+        if count >= HOTSPOT_WRITE_THRESHOLD:
             rel = _relative_path(path, project)
             candidates.append(
                 CandidateNode(
@@ -236,7 +237,7 @@ def _diff_file_ast(file_path: Path, project: str) -> list[dict[str, Any]]:
     try:
         blob = repo.head.commit.tree[rel]
         before_source = blob.data_stream.read().decode("utf-8", errors="replace")
-    except (KeyError, ValueError, Exception):
+    except Exception:
         # File is new this session — no prior blob to diff against
         return []
 
