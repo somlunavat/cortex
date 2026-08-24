@@ -1216,3 +1216,156 @@ class TestCountTokens:
         from core.retrieval import count_tokens
 
         assert count_tokens("hello hello hello hello") > count_tokens("hello")
+
+
+# ---------------------------------------------------------------------------
+# ScoredNode — field types
+# ---------------------------------------------------------------------------
+
+
+class TestScoredNodeFields:
+    def _make_node(self, text: str = "a node") -> Node:
+        return _make_node(text)
+
+    def test_score_field_is_float(self) -> None:
+        sn = ScoredNode(node=self._make_node(), score=0.85)
+        assert isinstance(sn.score, float)
+
+    def test_node_field_is_node_instance(self) -> None:
+        n = self._make_node()
+        sn = ScoredNode(node=n, score=0.5)
+        assert sn.node is n
+
+    def test_score_zero_allowed(self) -> None:
+        sn = ScoredNode(node=self._make_node(), score=0.0)
+        assert sn.score == 0.0
+
+    def test_score_one_allowed(self) -> None:
+        sn = ScoredNode(node=self._make_node(), score=1.0)
+        assert sn.score == 1.0
+
+    def test_node_text_accessible_via_scored_node(self) -> None:
+        n = self._make_node(text="my important fact")
+        sn = ScoredNode(node=n, score=0.5)
+        assert sn.node.text == "my important fact"
+
+
+# ---------------------------------------------------------------------------
+# Constants — weight sanity
+# ---------------------------------------------------------------------------
+
+
+class TestRetrievalConstants:
+    def test_weights_sum_to_one(self) -> None:
+        total = VECTOR_WEIGHT + BM25_WEIGHT + GRAPH_WEIGHT
+        assert abs(total - 1.0) < 1e-9
+
+    def test_vector_weight_is_float(self) -> None:
+        assert isinstance(VECTOR_WEIGHT, float)
+
+    def test_bm25_weight_is_float(self) -> None:
+        assert isinstance(BM25_WEIGHT, float)
+
+    def test_graph_weight_is_float(self) -> None:
+        assert isinstance(GRAPH_WEIGHT, float)
+
+    def test_top_k_is_positive_int(self) -> None:
+        assert isinstance(TOP_K, int) and TOP_K > 0
+
+    def test_token_budget_is_positive_int(self) -> None:
+        assert isinstance(TOKEN_BUDGET, int) and TOKEN_BUDGET > 0
+
+
+# ---------------------------------------------------------------------------
+# vector_channel — score bounds
+# ---------------------------------------------------------------------------
+
+
+class TestVectorChannelScoreRange:
+    def test_scores_bounded_between_zero_and_one(
+        self, rng: np.random.Generator
+    ) -> None:
+        emb = rng.random(384).astype(np.float32)
+        nodes = [
+            _make_node(f"node {i}", embedding=rng.random(384).astype(np.float32))
+            for i in range(3)
+        ]
+        result = vector_channel(emb, nodes)
+        assert all(0.0 <= sn.score <= 1.0 for sn in result)
+
+    def test_returns_scored_node_list(self, rng: np.random.Generator) -> None:
+        emb = rng.random(384).astype(np.float32)
+        nodes = [_make_node("text", embedding=rng.random(384).astype(np.float32))]
+        result = vector_channel(emb, nodes)
+        assert all(isinstance(sn, ScoredNode) for sn in result)
+
+    def test_count_matches_input_count(self, rng: np.random.Generator) -> None:
+        emb = rng.random(384).astype(np.float32)
+        nodes = [
+            _make_node(f"t{i}", embedding=rng.random(384).astype(np.float32))
+            for i in range(5)
+        ]
+        result = vector_channel(emb, nodes)
+        assert len(result) == 5
+
+    def test_score_values_are_float(self, rng: np.random.Generator) -> None:
+        emb = rng.random(384).astype(np.float32)
+        nodes = [_make_node("test", embedding=rng.random(384).astype(np.float32))]
+        result = vector_channel(emb, nodes)
+        assert all(isinstance(sn.score, float) for sn in result)
+
+
+# ---------------------------------------------------------------------------
+# graph_channel — hop score values
+# ---------------------------------------------------------------------------
+
+
+class TestGraphChannelHopValues:
+    def test_hop1_score_is_half(self, graph: Graph, rng: np.random.Generator) -> None:
+        e = _random_embedding(rng)
+        seed_id = graph.write_node(_make_node("seed text", embedding=e))
+        nb_id = graph.write_node(_make_node("neighbor text", embedding=e))
+        graph.write_edge(seed_id, nb_id)
+        seed_node = graph.get_node(seed_id)
+        nb_node = graph.get_node(nb_id)
+        assert seed_node and nb_node
+        result = graph_channel([seed_node], graph, [seed_node, nb_node])
+        nb_sn = next(sn for sn in result if sn.node.id == nb_id)
+        assert nb_sn.score == pytest.approx(0.5, abs=1e-6)
+
+    def test_isolated_node_scores_zero(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        seed_id = graph.write_node(_make_node("seed", embedding=e))
+        iso_id = graph.write_node(_make_node("isolated", embedding=e))
+        seed_node = graph.get_node(seed_id)
+        iso_node = graph.get_node(iso_id)
+        assert seed_node and iso_node
+        result = graph_channel([seed_node], graph, [seed_node, iso_node])
+        iso_sn = next(sn for sn in result if sn.node.id == iso_id)
+        assert iso_sn.score == 0.0
+
+    def test_all_scores_are_floats(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        n1_id = graph.write_node(_make_node("node one", embedding=e))
+        n2_id = graph.write_node(_make_node("node two", embedding=e))
+        graph.write_edge(n1_id, n2_id)
+        n1 = graph.get_node(n1_id)
+        n2 = graph.get_node(n2_id)
+        assert n1 and n2
+        result = graph_channel([n1], graph, [n1, n2])
+        assert all(isinstance(sn.score, float) for sn in result)
+
+    def test_result_count_matches_all_nodes(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        e = _random_embedding(rng)
+        ids = [graph.write_node(_make_node(t, embedding=e)) for t in ("a", "b", "c")]
+        nodes = [graph.get_node(nid) for nid in ids]
+        valid = [n for n in nodes if n is not None]
+        assert len(valid) == 3
+        result = graph_channel([valid[0]], graph, valid)
+        assert len(result) == 3
