@@ -974,3 +974,32 @@ class TestSummarizeSession:
         ]
         summary = summarize_session(events)
         assert summary.session_id == "zz99"
+
+
+# ---------------------------------------------------------------------------
+# EventType — enum value coverage
+# ---------------------------------------------------------------------------
+
+
+class TestEventTypeValues:
+    def test_file_read_value(self) -> None:
+        assert EventType.FILE_READ == "file_read"
+
+    def test_file_write_value(self) -> None:
+        assert EventType.FILE_WRITE == "file_write"
+
+    def test_bash_failure_value(self) -> None:
+        assert EventType.BASH_FAILURE == "bash_failure"
+
+    def test_assistant_message_value(self) -> None:
+        assert EventType.ASSISTANT_MESSAGE == "assistant_message"
+
+    def test_session_start_value(self) -> None:
+        assert EventType.SESSION_START == "session_start"
+
+    def test_event_type_is_str(self) -> None:
+        assert isinstance(EventType.FILE_WRITE, str)
+
+    def test_all_event_types_have_unique_values(self) -> None:
+        values = [e.value for e in EventType]
+        assert len(values) == len(set(values))
