@@ -8,12 +8,20 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from core.parser import EventType, ParsedEvent
+from core.parser import (
+    HOTSPOT_WRITE_THRESHOLD,
+    EventType,
+    ParsedEvent,
+)
+from core.parser import (
+    extract_prose_turns as _parse_prose_turns,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +70,17 @@ class CandidateNode:
 DURABILITY_THRESHOLD = 0.4
 MAX_TEXT_LENGTH = 200
 
+# Durability score adjustments applied by _score_durability
+_DURABILITY_BASE = 0.5
+_DURABILITY_BOOST_CONVENTION = 0.3
+_DURABILITY_BOOST_ALWAYS = 0.2
+_DURABILITY_BOOST_NEVER = 0.2
+_DURABILITY_BOOST_NAMED_ENTITY = 0.1
+_DURABILITY_PENALTY_MAYBE = 0.3
+_DURABILITY_PENALTY_TEMPORARY = 0.4
+_DURABILITY_PENALTY_FOR_NOW = 0.3
+_DURABILITY_PENALTY_THIS_SESSION = 0.4
+
 # ---------------------------------------------------------------------------
 # Channel 1: JSONL signals
 # ---------------------------------------------------------------------------
@@ -81,8 +100,6 @@ def jsonl_channel(events: list[ParsedEvent], project: str) -> list[CandidateNode
     Returns:
         List of CandidateNode objects from JSONL signals.
     """
-    from collections import Counter
-
     candidates: list[CandidateNode] = []
 
     # Hotspot detection
@@ -94,7 +111,7 @@ def jsonl_channel(events: list[ParsedEvent], project: str) -> list[CandidateNode
                 write_counts[path] += 1
 
     for path, count in write_counts.items():
-        if count >= 3:
+        if count >= HOTSPOT_WRITE_THRESHOLD:
             rel = _relative_path(path, project)
             candidates.append(
                 CandidateNode(
@@ -220,7 +237,7 @@ def _diff_file_ast(file_path: Path, project: str) -> list[dict[str, Any]]:
     try:
         blob = repo.head.commit.tree[rel]
         before_source = blob.data_stream.read().decode("utf-8", errors="replace")
-    except (KeyError, ValueError, Exception):
+    except Exception:
         # File is new this session — no prior blob to diff against
         return []
 
@@ -412,8 +429,6 @@ def git_channel(project_root: Path, session_start: int) -> list[CandidateNode]:
 
 def _compute_file_churn(repo: Any, lookback: int, threshold: float) -> dict[str, float]:
     """Return files modified in > threshold fraction of the last N commits."""
-    from collections import Counter
-
     counts: Counter[str] = Counter()
     commits = list(repo.iter_commits(max_count=lookback))
     total = len(commits)
@@ -502,25 +517,25 @@ def _is_convention_sentence(sent: Any) -> bool:
 def _score_durability(sent: Any, node_type: NodeType) -> float:
     """Compute durability score for a sentence using rule-based heuristics."""
     text_lower = sent.text.lower()
-    score = 0.5
+    score = _DURABILITY_BASE
 
     if node_type == NodeType.CONVENTION:
-        score += 0.3
+        score += _DURABILITY_BOOST_CONVENTION
     if "always" in text_lower:
-        score += 0.2
+        score += _DURABILITY_BOOST_ALWAYS
     if "never" in text_lower:
-        score += 0.2
+        score += _DURABILITY_BOOST_NEVER
     if any(ent.label_ in ("ORG", "PRODUCT") for ent in sent.ents):
-        score += 0.1
+        score += _DURABILITY_BOOST_NAMED_ENTITY
 
     if "maybe" in text_lower:
-        score -= 0.3
+        score -= _DURABILITY_PENALTY_MAYBE
     if "temporary" in text_lower:
-        score -= 0.4
+        score -= _DURABILITY_PENALTY_TEMPORARY
     if "for now" in text_lower:
-        score -= 0.3
+        score -= _DURABILITY_PENALTY_FOR_NOW
     if "this session" in text_lower:
-        score -= 0.4
+        score -= _DURABILITY_PENALTY_THIS_SESSION
 
     return max(0.0, min(1.0, score))
 
@@ -652,15 +667,6 @@ def _infer_touched_files(events: list[ParsedEvent]) -> list[Path]:
     return result
 
 
-def _extract_prose_turns(events: list[ParsedEvent]) -> list[str]:
-    """Return text from assistant_message events in order."""
-    return [
-        str(e.data.get("text", ""))
-        for e in events
-        if e.type == EventType.ASSISTANT_MESSAGE and e.data.get("text")
-    ]
-
-
 def run_extraction(
     events: list[ParsedEvent],
     project: str,
@@ -682,7 +688,7 @@ def run_extraction(
         Merged list of CandidateNode objects, deduplicated by text.
     """
     files = touched_files if touched_files is not None else _infer_touched_files(events)
-    prose_turns = _extract_prose_turns(events)
+    prose_turns = list(_parse_prose_turns(events))
 
     all_candidates: list[CandidateNode] = [
         *jsonl_channel(events, project),
