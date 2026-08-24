@@ -1216,3 +1216,61 @@ class TestCountTokens:
         from core.retrieval import count_tokens
 
         assert count_tokens("hello hello hello hello") > count_tokens("hello")
+
+
+# ---------------------------------------------------------------------------
+# ScoredNode — field types
+# ---------------------------------------------------------------------------
+
+
+class TestScoredNodeFields:
+    def _make_node(self, text: str = "a node") -> Node:
+        return _make_node(text)
+
+    def test_score_field_is_float(self) -> None:
+        sn = ScoredNode(node=self._make_node(), score=0.85)
+        assert isinstance(sn.score, float)
+
+    def test_node_field_is_node_instance(self) -> None:
+        n = self._make_node()
+        sn = ScoredNode(node=n, score=0.5)
+        assert sn.node is n
+
+    def test_score_zero_allowed(self) -> None:
+        sn = ScoredNode(node=self._make_node(), score=0.0)
+        assert sn.score == 0.0
+
+    def test_score_one_allowed(self) -> None:
+        sn = ScoredNode(node=self._make_node(), score=1.0)
+        assert sn.score == 1.0
+
+    def test_node_text_accessible_via_scored_node(self) -> None:
+        n = self._make_node(text="my important fact")
+        sn = ScoredNode(node=n, score=0.5)
+        assert sn.node.text == "my important fact"
+
+
+# ---------------------------------------------------------------------------
+# Constants — weight sanity
+# ---------------------------------------------------------------------------
+
+
+class TestRetrievalConstants:
+    def test_weights_sum_to_one(self) -> None:
+        total = VECTOR_WEIGHT + BM25_WEIGHT + GRAPH_WEIGHT
+        assert abs(total - 1.0) < 1e-9
+
+    def test_vector_weight_is_float(self) -> None:
+        assert isinstance(VECTOR_WEIGHT, float)
+
+    def test_bm25_weight_is_float(self) -> None:
+        assert isinstance(BM25_WEIGHT, float)
+
+    def test_graph_weight_is_float(self) -> None:
+        assert isinstance(GRAPH_WEIGHT, float)
+
+    def test_top_k_is_positive_int(self) -> None:
+        assert isinstance(TOP_K, int) and TOP_K > 0
+
+    def test_token_budget_is_positive_int(self) -> None:
+        assert isinstance(TOKEN_BUDGET, int) and TOKEN_BUDGET > 0
