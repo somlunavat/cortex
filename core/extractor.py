@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -81,8 +82,6 @@ def jsonl_channel(events: list[ParsedEvent], project: str) -> list[CandidateNode
     Returns:
         List of CandidateNode objects from JSONL signals.
     """
-    from collections import Counter
-
     candidates: list[CandidateNode] = []
 
     # Hotspot detection
@@ -412,8 +411,6 @@ def git_channel(project_root: Path, session_start: int) -> list[CandidateNode]:
 
 def _compute_file_churn(repo: Any, lookback: int, threshold: float) -> dict[str, float]:
     """Return files modified in > threshold fraction of the last N commits."""
-    from collections import Counter
-
     counts: Counter[str] = Counter()
     commits = list(repo.iter_commits(max_count=lookback))
     total = len(commits)
