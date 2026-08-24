@@ -930,3 +930,47 @@ class TestSummarizeSession:
         ]
         summary = summarize_session(events)
         assert len(summary.bash_failures) == 2
+
+    def test_summarize_session_co_occurring_pairs_populated(self) -> None:
+        events = [
+            _make_write_event("/proj/a.py", timestamp=0),
+            _make_write_event("/proj/b.py", timestamp=5),
+        ]
+        summary = summarize_session(events)
+        assert len(summary.co_occurring_pairs) == 1
+
+    def test_summarize_session_hotspot_file_count(self) -> None:
+        events = [
+            _make_write_event("/proj/a.py", ts) for ts in range(HOTSPOT_WRITE_THRESHOLD)
+        ] + [
+            _make_write_event("/proj/b.py", ts + 100)
+            for ts in range(HOTSPOT_WRITE_THRESHOLD)
+        ]
+        summary = summarize_session(events)
+        assert len(summary.hotspot_files) == 2
+
+    def test_summarize_session_prose_turns_length(self) -> None:
+        events = [
+            _make_event(EventType.ASSISTANT_MESSAGE, data={"text": f"turn {i}"})
+            for i in range(3)
+        ]
+        summary = summarize_session(events)
+        assert len(summary.prose_turns) == 3
+
+    def test_summarize_session_no_hotspot_below_threshold(self) -> None:
+        events = [
+            _make_write_event("/proj/x.py", ts)
+            for ts in range(HOTSPOT_WRITE_THRESHOLD - 1)
+        ]
+        summary = summarize_session(events)
+        assert len(summary.hotspot_files) == 0
+
+    def test_summarize_session_mixed_events_session_id(self) -> None:
+        events = [
+            _make_event(EventType.BASH_SUCCESS, session_id="zz99"),
+            _make_event(
+                EventType.ASSISTANT_MESSAGE, data={"text": "hi"}, session_id="zz99"
+            ),
+        ]
+        summary = summarize_session(events)
+        assert summary.session_id == "zz99"
