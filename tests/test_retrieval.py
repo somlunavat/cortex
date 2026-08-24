@@ -1274,3 +1274,42 @@ class TestRetrievalConstants:
 
     def test_token_budget_is_positive_int(self) -> None:
         assert isinstance(TOKEN_BUDGET, int) and TOKEN_BUDGET > 0
+
+
+# ---------------------------------------------------------------------------
+# vector_channel — score bounds
+# ---------------------------------------------------------------------------
+
+
+class TestVectorChannelScoreRange:
+    def test_scores_bounded_between_zero_and_one(
+        self, rng: np.random.Generator
+    ) -> None:
+        emb = rng.random(384).astype(np.float32)
+        nodes = [
+            _make_node(f"node {i}", embedding=rng.random(384).astype(np.float32))
+            for i in range(3)
+        ]
+        result = vector_channel(emb, nodes)
+        assert all(0.0 <= sn.score <= 1.0 for sn in result)
+
+    def test_returns_scored_node_list(self, rng: np.random.Generator) -> None:
+        emb = rng.random(384).astype(np.float32)
+        nodes = [_make_node("text", embedding=rng.random(384).astype(np.float32))]
+        result = vector_channel(emb, nodes)
+        assert all(isinstance(sn, ScoredNode) for sn in result)
+
+    def test_count_matches_input_count(self, rng: np.random.Generator) -> None:
+        emb = rng.random(384).astype(np.float32)
+        nodes = [
+            _make_node(f"t{i}", embedding=rng.random(384).astype(np.float32))
+            for i in range(5)
+        ]
+        result = vector_channel(emb, nodes)
+        assert len(result) == 5
+
+    def test_score_values_are_float(self, rng: np.random.Generator) -> None:
+        emb = rng.random(384).astype(np.float32)
+        nodes = [_make_node("test", embedding=rng.random(384).astype(np.float32))]
+        result = vector_channel(emb, nodes)
+        assert all(isinstance(sn.score, float) for sn in result)
