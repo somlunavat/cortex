@@ -9,14 +9,15 @@ Requires:
     ANTHROPIC_API_KEY  — Anthropic API key (GitHub secret)
     GITHUB_TOKEN       — GitHub token (automatic in Actions, write access)
 """
+
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import anthropic
@@ -27,7 +28,7 @@ import anthropic
 
 REPO = "somlunavat/cortex"
 GH_TOKEN = os.environ["GITHUB_TOKEN"]
-NOW = datetime.now(timezone.utc)
+NOW = _dt.datetime.now(_dt.UTC)
 DATE_TAG = NOW.strftime("%Y%m%d")
 
 # Six test areas; we rotate through them so each day hits a fresh set.
@@ -70,9 +71,7 @@ TARGETS = [
 
 
 def run(cmd: str, cwd: str | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        cmd, shell=True, capture_output=True, text=True, cwd=cwd
-    )
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd)
 
 
 def run_check(cmd: str, cwd: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -92,10 +91,10 @@ def run_check(cmd: str, cwd: str | None = None) -> subprocess.CompletedProcess[s
 def _gh(method: str, path: str, body: dict | None = None) -> dict:
     data_flag = f"-d '{json.dumps(body)}'" if body else ""
     result = run(
-        f'curl -sf -X {method} '
+        f"curl -sf -X {method} "
         f'-H "Authorization: token {GH_TOKEN}" '
         f'-H "Content-Type: application/json" '
-        f'{data_flag} '
+        f"{data_flag} "
         f'"https://api.github.com/repos/{REPO}/{path}"'
     )
     if not result.stdout.strip():
@@ -107,7 +106,9 @@ def _gh(method: str, path: str, body: dict | None = None) -> dict:
 
 
 def create_pr(branch: str, title: str, body: str) -> int | None:
-    resp = _gh("POST", "pulls", {"title": title, "body": body, "head": branch, "base": "main"})
+    resp = _gh(
+        "POST", "pulls", {"title": title, "body": body, "head": branch, "base": "main"}
+    )
     return resp.get("number")
 
 
@@ -123,7 +124,7 @@ def enable_automerge(pr_number: int) -> None:
         "{pullRequest{number}}}"
     )
     run(
-        f'curl -sf -X POST '
+        f"curl -sf -X POST "
         f'-H "Authorization: token {GH_TOKEN}" '
         f'-H "Content-Type: application/json" '
         f'-d \'{json.dumps({"query": mutation, "variables": {"id": node_id}})}\' '
@@ -142,7 +143,7 @@ def extract_class_code(raw: str) -> str:
     raw = re.sub(r"```\s*", "", raw)
     raw = raw.strip()
     m = re.search(r"^class \w+", raw, re.MULTILINE)
-    return raw[m.start():] if m else raw
+    return raw[m.start() :] if m else raw
 
 
 def generate_test_class(target: dict, class_suffix: str) -> str:
@@ -154,8 +155,9 @@ def generate_test_class(target: dict, class_suffix: str) -> str:
 
     # Provide imports and last 60 lines as style context
     header_lines = [
-        ln for ln in test_content.splitlines()
-        if ln.startswith(("import ", "from ")) or ln.startswith("def _")
+        ln
+        for ln in test_content.splitlines()
+        if ln.startswith(("import ", "from ", "def _"))
     ]
     header = "\n".join(header_lines[:40])
     tail = "\n".join(test_content.splitlines()[-60:])
