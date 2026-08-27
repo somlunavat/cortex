@@ -1092,3 +1092,23 @@ class TestDecay20260901C:
         nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
         if nodes:
             assert nodes[0].weight == pytest.approx(2.0 * TIER1_DECAY_RATE, abs=1e-4)
+
+
+class TestDecayConstants:
+    def test_tier1_decay_rate_less_than_one(self) -> None:
+        assert TIER1_DECAY_RATE < 1.0
+
+    def test_tier2_decay_rate_less_than_one(self) -> None:
+        assert TIER2_DECAY_RATE < 1.0
+
+    def test_tier2_decay_rate_greater_than_tier1(self) -> None:
+        assert TIER2_DECAY_RATE > TIER1_DECAY_RATE
+
+    def test_tier1_eviction_threshold_is_positive(self) -> None:
+        assert TIER1_EVICTION_THRESHOLD > 0.0
+
+    def test_tier1_promotion_weight_is_positive(self) -> None:
+        assert TIER1_PROMOTION_WEIGHT > 0.0
+
+    def test_tier2_promotion_weight_greater_than_tier1(self) -> None:
+        assert TIER2_PROMOTION_WEIGHT > TIER1_PROMOTION_WEIGHT
