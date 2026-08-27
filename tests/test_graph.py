@@ -3105,3 +3105,59 @@ class TestGraph20260901A:
         result = graph.get_node(node_id)
         assert result is not None
         assert result.tier == 2
+
+
+class TestWriteEdgeBehavior:
+    def test_self_loop_raises(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding))
+        with pytest.raises(ValueError):
+            graph.write_edge(nid, nid)
+
+    def test_edge_strength_starts_at_one(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        edges = graph.get_edges(a)
+        assert edges[0].strength == 1.0
+
+    def test_duplicate_edge_increments_strength(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        graph.write_edge(a, b)
+        edges = graph.get_edges(a)
+        assert edges[0].strength == 2.0
+
+    def test_edge_appears_in_both_directions(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        assert len(graph.get_edges(a)) == 1
+        assert len(graph.get_edges(b)) == 1
+
+    def test_two_edges_from_same_node(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a = graph.write_node(_make_node(dummy_embedding, text="hub"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        c = graph.write_node(_make_node(dummy_embedding, text="c"))
+        graph.write_edge(a, b)
+        graph.write_edge(a, c)
+        assert len(graph.get_edges(a)) == 2
+
+    def test_get_edges_returns_edge_objects(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        from core.graph import Edge
+
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        edges = graph.get_edges(a)
+        assert all(isinstance(e, Edge) for e in edges)
