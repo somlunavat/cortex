@@ -3233,3 +3233,53 @@ class TestMergeNodeBehavior:
     ) -> None:
         candidate = _make_node(dummy_embedding, text="candidate")
         graph.merge_node("nonexistent-id", candidate)  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# update_node_tier — tier and precision updated
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateNodeTierBehavior:
+    def test_tier_updated_to_two(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(nid, 2, 8, None, int(time.time()))
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.tier == 2
+
+    def test_precision_bits_updated(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(nid, 2, 8, None, int(time.time()))
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.precision_bits == 8
+
+    def test_tier_three_promotion(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(nid, 3, 2, None, int(time.time()))
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.tier == 3
+
+    def test_nonexistent_node_update_is_noop(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.update_node_tier("no-such-id", 2, 8, None, int(time.time()))
+        assert graph.get_node("no-such-id") is None
+
+    def test_get_node_returns_none_for_unknown_id(self, graph: Graph) -> None:
+        result = graph.get_node("totally-unknown-uuid")
+        assert result is None
+
+    def test_write_node_returns_string_id(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding))
+        assert isinstance(nid, str) and len(nid) > 0
