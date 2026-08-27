@@ -1,0 +1,43 @@
+name: Daily Commits
+
+on:
+  schedule:
+    - cron: "0 13 * * *"  # 9am Eastern (1pm UTC)
+  workflow_dispatch:       # manual trigger from GitHub UI
+
+jobs:
+  daily-commits:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+          pip install anthropic
+          python -m spacy download en_core_web_sm
+
+      - name: Configure git
+        run: |
+          git config user.name "somlunavat"
+          git config user.email "sl58878@my.utexas.edu"
+          git remote set-url origin \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/somlunavat/cortex.git"
+
+      - name: Run daily commits
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python .github/scripts/daily_commits.py
