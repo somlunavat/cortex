@@ -3161,3 +3161,75 @@ class TestWriteEdgeBehavior:
         graph.write_edge(a, b)
         edges = graph.get_edges(a)
         assert all(isinstance(e, Edge) for e in edges)
+
+
+# ---------------------------------------------------------------------------
+# merge_node — weight, text, rationale, session_count
+# ---------------------------------------------------------------------------
+
+
+class TestMergeNodeBehavior:
+    def test_merge_bumps_weight(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(
+            _make_node(dummy_embedding, text="long original text here")
+        )
+        node_before = graph.get_node(nid)
+        assert node_before is not None
+        weight_before = node_before.weight
+        candidate = _make_node(dummy_embedding, text="short")
+        graph.merge_node(nid, candidate)
+        node_after = graph.get_node(nid)
+        assert node_after is not None
+        assert node_after.weight > weight_before
+
+    def test_merge_keeps_longer_text(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, text="a long existing text"))
+        candidate = _make_node(dummy_embedding, text="short")
+        graph.merge_node(nid, candidate)
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.text == "short"
+
+    def test_merge_keeps_existing_rationale(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(
+            _make_node(dummy_embedding, text="text", rationale="existing rationale")
+        )
+        candidate = _make_node(dummy_embedding, text="t", rationale="new rationale")
+        graph.merge_node(nid, candidate)
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.rationale == "existing rationale"
+
+    def test_merge_fills_null_rationale(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, text="text", rationale=None))
+        candidate = _make_node(dummy_embedding, text="t", rationale="filled rationale")
+        graph.merge_node(nid, candidate)
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.rationale == "filled rationale"
+
+    def test_merge_increments_session_count(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, text="long text here"))
+        before = graph.get_node(nid)
+        assert before is not None
+        count_before = before.session_count
+        graph.merge_node(nid, _make_node(dummy_embedding, text="x"))
+        after = graph.get_node(nid)
+        assert after is not None
+        assert after.session_count == count_before + 1
+
+    def test_merge_nonexistent_node_is_noop(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        candidate = _make_node(dummy_embedding, text="candidate")
+        graph.merge_node("nonexistent-id", candidate)  # should not raise
