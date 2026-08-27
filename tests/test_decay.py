@@ -1189,3 +1189,56 @@ class TestMeetsPromotionCriteriaBoundary:
             session_count=999,
         )
         assert not _meets_promotion_criteria(node, 999.0, int(time.time()))
+
+
+# ---------------------------------------------------------------------------
+# DecayResult dataclass fields
+# ---------------------------------------------------------------------------
+
+
+class TestDecayResultFields:
+    def test_project_field_stored(self) -> None:
+        result = DecayResult(
+            project="/tmp/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert result.project == "/tmp/p"
+
+    def test_nodes_decayed_zero(self) -> None:
+        result = DecayResult(
+            project="/tmp/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert result.nodes_decayed == 0
+
+    def test_nodes_evicted_zero(self) -> None:
+        result = DecayResult(
+            project="/tmp/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert result.nodes_evicted == 0
+
+    def test_nodes_promoted_zero(self) -> None:
+        result = DecayResult(
+            project="/tmp/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert result.nodes_promoted == 0
+
+    def test_nonzero_counts_stored(self) -> None:
+        result = DecayResult(
+            project="/p", nodes_decayed=10, nodes_evicted=2, nodes_promoted=1
+        )
+        assert result.nodes_decayed == 10
+        assert result.nodes_evicted == 2
+        assert result.nodes_promoted == 1
+
+    def test_result_is_dataclass_instance(self) -> None:
+        from dataclasses import fields
+
+        result = DecayResult(
+            project="/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        field_names = {f.name for f in fields(result)}
+        assert {
+            "project",
+            "nodes_decayed",
+            "nodes_evicted",
+            "nodes_promoted",
+        } == field_names
