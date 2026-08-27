@@ -1112,3 +1112,80 @@ class TestDecayConstants:
 
     def test_tier2_promotion_weight_greater_than_tier1(self) -> None:
         assert TIER2_PROMOTION_WEIGHT > TIER1_PROMOTION_WEIGHT
+
+
+# ---------------------------------------------------------------------------
+# _meets_promotion_criteria — boundary conditions
+# ---------------------------------------------------------------------------
+
+
+class TestMeetsPromotionCriteriaBoundary:
+    def test_tier1_exactly_at_weight_threshold_qualifies(
+        self, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(
+            dummy_embedding,
+            tier=1,
+            weight=TIER1_PROMOTION_WEIGHT,
+            session_count=TIER1_PROMOTION_SESSIONS,
+        )
+        assert _meets_promotion_criteria(node, TIER1_PROMOTION_WEIGHT, int(time.time()))
+
+    def test_tier1_one_session_short_does_not_qualify(
+        self, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(
+            dummy_embedding,
+            tier=1,
+            weight=TIER1_PROMOTION_WEIGHT,
+            session_count=TIER1_PROMOTION_SESSIONS - 1,
+        )
+        assert not _meets_promotion_criteria(
+            node, TIER1_PROMOTION_WEIGHT, int(time.time())
+        )
+
+    def test_tier1_weight_just_below_threshold_does_not_qualify(
+        self, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(
+            dummy_embedding,
+            tier=1,
+            weight=TIER1_PROMOTION_WEIGHT - 0.01,
+            session_count=TIER1_PROMOTION_SESSIONS,
+        )
+        assert not _meets_promotion_criteria(
+            node, TIER1_PROMOTION_WEIGHT - 0.01, int(time.time())
+        )
+
+    def test_tier2_too_young_does_not_qualify(
+        self, dummy_embedding: np.ndarray
+    ) -> None:
+        now = int(time.time())
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT,
+            session_count=TIER2_PROMOTION_SESSIONS,
+            created_at=now - (TIER2_PROMOTION_AGE_DAYS - 1) * SECONDS_PER_DAY,
+        )
+        assert not _meets_promotion_criteria(node, TIER2_PROMOTION_WEIGHT, now)
+
+    def test_tier2_old_enough_qualifies(self, dummy_embedding: np.ndarray) -> None:
+        now = int(time.time())
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT,
+            session_count=TIER2_PROMOTION_SESSIONS,
+            created_at=now - TIER2_PROMOTION_AGE_DAYS * SECONDS_PER_DAY,
+        )
+        assert _meets_promotion_criteria(node, TIER2_PROMOTION_WEIGHT, now)
+
+    def test_tier3_never_qualifies(self, dummy_embedding: np.ndarray) -> None:
+        node = _make_node(
+            dummy_embedding,
+            tier=3,
+            weight=999.0,
+            session_count=999,
+        )
+        assert not _meets_promotion_criteria(node, 999.0, int(time.time()))
