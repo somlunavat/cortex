@@ -1003,3 +1003,23 @@ class TestEventTypeValues:
     def test_all_event_types_have_unique_values(self) -> None:
         values = [e.value for e in EventType]
         assert len(values) == len(set(values))
+
+
+class TestParser20260830A:
+    def test_event_type_file_write_value(self) -> None:
+        assert EventType.FILE_WRITE.value == "file_write"
+
+    def test_event_type_bash_failure_value(self) -> None:
+        assert EventType.BASH_FAILURE.value == "bash_failure"
+
+    def test_event_type_assistant_message_value(self) -> None:
+        assert EventType.ASSISTANT_MESSAGE.value == "assistant_message"
+
+    def test_co_occurrence_window_positive(self) -> None:
+        assert CO_OCCURRENCE_WINDOW_SECONDS > 0
+
+    def test_hotspot_write_threshold_positive(self) -> None:
+        assert HOTSPOT_WRITE_THRESHOLD > 0
+
+    def test_hotspot_write_threshold_integer(self) -> None:
+        assert isinstance(HOTSPOT_WRITE_THRESHOLD, int)
