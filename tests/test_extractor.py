@@ -1302,3 +1302,23 @@ class TestRunExtractionIntegration:
     def test_explicit_touched_files_overrides_inferred(self) -> None:
         result = run_extraction([], TEST_PROJECT, touched_files=[])
         assert isinstance(result, list)
+
+
+class TestExtractor20260830A:
+    def test_node_type_observation_value(self) -> None:
+        assert NodeType.OBSERVATION.value == "observation"
+
+    def test_node_type_fact_value(self) -> None:
+        assert NodeType.FACT.value == "fact"
+
+    def test_scope_type_project_value(self) -> None:
+        assert ScopeType.PROJECT.value == "project"
+
+    def test_source_type_jsonl_value(self) -> None:
+        assert SourceType.JSONL.value == "jsonl"
+
+    def test_durability_threshold_positive(self) -> None:
+        assert DURABILITY_THRESHOLD > 0.0
+
+    def test_durability_threshold_lt_one(self) -> None:
+        assert DURABILITY_THRESHOLD < 1.0
