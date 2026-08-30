@@ -1390,3 +1390,36 @@ class TestHooksMainEntrypoints:
         with pytest.raises(SystemExit) as exc_info:
             runpy.run_module("hooks.extract", run_name="__main__", alter_sys=False)
         assert exc_info.value.code == 0
+
+
+class TestHooks20260830A:
+    def test_run_extract_missing_transcript_returns_zero(
+        self, graph: Graph, tmp_path: Path
+    ) -> None:
+        n = run_extract(tmp_path / "missing.jsonl", TEST_PROJECT, graph)
+        assert n == 0
+
+    def test_run_extract_empty_transcript_returns_zero(
+        self, graph: Graph, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "t.jsonl"
+        f.write_text("")
+        n = run_extract(f, TEST_PROJECT, graph)
+        assert n == 0
+
+    def test_run_extract_simple_fixture_returns_int(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert isinstance(result, int)
+
+    def test_run_extract_simple_fixture_nonnegative(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert result >= 0
+
+    def test_run_extract_idempotent(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        second = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert second == 0
+
+    def test_make_node_tier_preserved(self) -> None:
+        node = _make_node("text", tier=2)
+        assert node.tier == 2
