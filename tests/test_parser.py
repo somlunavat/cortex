@@ -1053,3 +1053,28 @@ class TestParser20260830B:
     def test_parsed_event_has_type_field(self) -> None:
         e = _make_event(EventType.FILE_WRITE)
         assert e.type == EventType.FILE_WRITE
+
+
+class TestParser20260830C:
+    def test_make_event_timestamp_default(self) -> None:
+        e = _make_event(EventType.BASH_FAILURE)
+        assert e.timestamp == 1000
+
+    def test_make_event_data_default_empty(self) -> None:
+        e = _make_event(EventType.ASSISTANT_MESSAGE)
+        assert e.data == {}
+
+    def test_make_write_event_data_has_path(self) -> None:
+        e = _make_write_event("/some/file.py")
+        assert e.data["path"] == "/some/file.py"
+
+    def test_make_write_event_type_is_file_write(self) -> None:
+        e = _make_write_event("/a.py")
+        assert e.type == EventType.FILE_WRITE
+
+    def test_co_occurrence_window_gte_ten(self) -> None:
+        assert CO_OCCURRENCE_WINDOW_SECONDS >= 10
+
+    def test_event_type_values_are_strings(self) -> None:
+        for member in EventType:
+            assert isinstance(member.value, str)
