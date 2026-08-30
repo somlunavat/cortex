@@ -1322,3 +1322,38 @@ class TestExtractor20260830A:
 
     def test_durability_threshold_lt_one(self) -> None:
         assert DURABILITY_THRESHOLD < 1.0
+
+
+class TestExtractor20260830C:
+    def test_run_extraction_empty_events(self) -> None:
+        result = run_extraction([], TEST_PROJECT, [], 0)
+        assert isinstance(result, list)
+
+    def test_run_extraction_simple_fixture(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        result = run_extraction(events, TEST_PROJECT, [], 1000)
+        assert isinstance(result, list)
+
+    def test_candidate_node_text_nonempty(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT, [], 1000)
+        for c in candidates:
+            assert c.text.strip() != ""
+
+    def test_candidate_scope_is_scope_type(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT, [], 1000)
+        for c in candidates:
+            assert isinstance(c.scope, ScopeType)
+
+    def test_candidate_source_is_source_type(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT, [], 1000)
+        for c in candidates:
+            assert isinstance(c.source, SourceType)
+
+    def test_candidate_type_is_node_type(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT, [], 1000)
+        for c in candidates:
+            assert isinstance(c.type, NodeType)
