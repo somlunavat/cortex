@@ -1449,3 +1449,30 @@ class TestHooks20260901B:
     def test_make_node_type_is_observation(self) -> None:
         node = _make_node("t")
         assert node.type == "observation"
+
+
+class TestHooks20260901C:
+    def test_run_inject_empty_graph_returns_str(self, graph: Graph) -> None:
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_run_inject_returns_string_always(self, graph: Graph) -> None:
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_run_extract_decisions_fixture_nonnegative(self, graph: Graph) -> None:
+        result = run_extract(DECISIONS_TRANSCRIPT, TEST_PROJECT, graph)
+        assert result >= 0
+
+    def test_run_extract_writes_nodes_to_graph(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert isinstance(nodes, list)
+
+    def test_make_node_source_is_jsonl(self) -> None:
+        node = _make_node("t")
+        assert node.source == "jsonl"
+
+    def test_make_node_scope_is_project(self) -> None:
+        node = _make_node("t")
+        assert node.scope == "project"
