@@ -613,8 +613,9 @@ class {cn}:
 """,
     lambda cn: f"""\
 class {cn}:
-    def test_build_bm25_index_one_doc(self) -> None:
-        index = build_bm25_index(["hello world"])
+    def test_build_bm25_index_one_node(self) -> None:
+        node = _make_node("hello world")
+        index = build_bm25_index([node])
         assert index is not None
 
     def test_bm25_weight_lt_one(self) -> None:
@@ -709,8 +710,8 @@ class {cn}:
         assert isinstance(results, list)
 
     def test_bm25_channel_with_index(self) -> None:
-        index = build_bm25_index(["hello world test"])
         node = _make_node("hello world test")
+        index = build_bm25_index([node])
         results = bm25_channel("hello", [node], index)
         assert isinstance(results, list)
 
