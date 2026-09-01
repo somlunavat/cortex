@@ -995,3 +995,23 @@ def test_tier3_node_never_decayed(graph: Graph, dummy_embedding: np.ndarray) -> 
     nodes = graph.get_all_nodes(project=TEST_PROJECT)
     assert nodes[0].weight == 100.0
     assert result.nodes_decayed == 0
+
+
+class TestDecay20260901A:
+    def test_tier1_rate_in_unit_interval(self) -> None:
+        assert 0.0 < TIER1_DECAY_RATE < 1.0
+
+    def test_tier2_rate_in_unit_interval(self) -> None:
+        assert 0.0 < TIER2_DECAY_RATE < 1.0
+
+    def test_tier2_rate_exceeds_tier1(self) -> None:
+        assert TIER2_DECAY_RATE > TIER1_DECAY_RATE
+
+    def test_tier1_eviction_threshold_positive(self) -> None:
+        assert TIER1_EVICTION_THRESHOLD > 0.0
+
+    def test_seconds_per_day_value(self) -> None:
+        assert SECONDS_PER_DAY == 86_400
+
+    def test_tier2_promotion_sessions_exceeds_tier1(self) -> None:
+        assert TIER2_PROMOTION_SESSIONS >= TIER1_PROMOTION_SESSIONS
