@@ -1092,3 +1092,153 @@ class TestDecay20260901C:
         nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
         if nodes:
             assert nodes[0].weight == pytest.approx(2.0 * TIER1_DECAY_RATE, abs=1e-4)
+
+
+class TestDecayConstants:
+    def test_tier1_decay_rate_less_than_one(self) -> None:
+        assert TIER1_DECAY_RATE < 1.0
+
+    def test_tier2_decay_rate_less_than_one(self) -> None:
+        assert TIER2_DECAY_RATE < 1.0
+
+    def test_tier2_decay_rate_greater_than_tier1(self) -> None:
+        assert TIER2_DECAY_RATE > TIER1_DECAY_RATE
+
+    def test_tier1_eviction_threshold_is_positive(self) -> None:
+        assert TIER1_EVICTION_THRESHOLD > 0.0
+
+    def test_tier1_promotion_weight_is_positive(self) -> None:
+        assert TIER1_PROMOTION_WEIGHT > 0.0
+
+    def test_tier2_promotion_weight_greater_than_tier1(self) -> None:
+        assert TIER2_PROMOTION_WEIGHT > TIER1_PROMOTION_WEIGHT
+
+
+# ---------------------------------------------------------------------------
+# _meets_promotion_criteria — boundary conditions
+# ---------------------------------------------------------------------------
+
+
+class TestMeetsPromotionCriteriaBoundary:
+    def test_tier1_exactly_at_weight_threshold_qualifies(
+        self, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(
+            dummy_embedding,
+            tier=1,
+            weight=TIER1_PROMOTION_WEIGHT,
+            session_count=TIER1_PROMOTION_SESSIONS,
+        )
+        assert _meets_promotion_criteria(node, TIER1_PROMOTION_WEIGHT, int(time.time()))
+
+    def test_tier1_one_session_short_does_not_qualify(
+        self, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(
+            dummy_embedding,
+            tier=1,
+            weight=TIER1_PROMOTION_WEIGHT,
+            session_count=TIER1_PROMOTION_SESSIONS - 1,
+        )
+        assert not _meets_promotion_criteria(
+            node, TIER1_PROMOTION_WEIGHT, int(time.time())
+        )
+
+    def test_tier1_weight_just_below_threshold_does_not_qualify(
+        self, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(
+            dummy_embedding,
+            tier=1,
+            weight=TIER1_PROMOTION_WEIGHT - 0.01,
+            session_count=TIER1_PROMOTION_SESSIONS,
+        )
+        assert not _meets_promotion_criteria(
+            node, TIER1_PROMOTION_WEIGHT - 0.01, int(time.time())
+        )
+
+    def test_tier2_too_young_does_not_qualify(
+        self, dummy_embedding: np.ndarray
+    ) -> None:
+        now = int(time.time())
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT,
+            session_count=TIER2_PROMOTION_SESSIONS,
+            created_at=now - (TIER2_PROMOTION_AGE_DAYS - 1) * SECONDS_PER_DAY,
+        )
+        assert not _meets_promotion_criteria(node, TIER2_PROMOTION_WEIGHT, now)
+
+    def test_tier2_old_enough_qualifies(self, dummy_embedding: np.ndarray) -> None:
+        now = int(time.time())
+        node = _make_node(
+            dummy_embedding,
+            tier=2,
+            weight=TIER2_PROMOTION_WEIGHT,
+            session_count=TIER2_PROMOTION_SESSIONS,
+            created_at=now - TIER2_PROMOTION_AGE_DAYS * SECONDS_PER_DAY,
+        )
+        assert _meets_promotion_criteria(node, TIER2_PROMOTION_WEIGHT, now)
+
+    def test_tier3_never_qualifies(self, dummy_embedding: np.ndarray) -> None:
+        node = _make_node(
+            dummy_embedding,
+            tier=3,
+            weight=999.0,
+            session_count=999,
+        )
+        assert not _meets_promotion_criteria(node, 999.0, int(time.time()))
+
+
+# ---------------------------------------------------------------------------
+# DecayResult dataclass fields
+# ---------------------------------------------------------------------------
+
+
+class TestDecayResultFields:
+    def test_project_field_stored(self) -> None:
+        result = DecayResult(
+            project="/tmp/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert result.project == "/tmp/p"
+
+    def test_nodes_decayed_zero(self) -> None:
+        result = DecayResult(
+            project="/tmp/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert result.nodes_decayed == 0
+
+    def test_nodes_evicted_zero(self) -> None:
+        result = DecayResult(
+            project="/tmp/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert result.nodes_evicted == 0
+
+    def test_nodes_promoted_zero(self) -> None:
+        result = DecayResult(
+            project="/tmp/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert result.nodes_promoted == 0
+
+    def test_nonzero_counts_stored(self) -> None:
+        result = DecayResult(
+            project="/p", nodes_decayed=10, nodes_evicted=2, nodes_promoted=1
+        )
+        assert result.nodes_decayed == 10
+        assert result.nodes_evicted == 2
+        assert result.nodes_promoted == 1
+
+    def test_result_is_dataclass_instance(self) -> None:
+        from dataclasses import fields
+
+        result = DecayResult(
+            project="/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        field_names = {f.name for f in fields(result)}
+        assert {
+            "project",
+            "nodes_decayed",
+            "nodes_evicted",
+            "nodes_promoted",
+        } == field_names
