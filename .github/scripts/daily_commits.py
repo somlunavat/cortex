@@ -980,17 +980,14 @@ class {cn}:
         assert len(result) >= 1
 
     def test_is_retracted_false_for_normal(self) -> None:
-        e = _make_event(EventType.FILE_WRITE, data={{"path": "/a.py"}})
-        assert not _is_retracted(e)
+        assert not _is_retracted("this is a normal statement")
 
     def test_score_durability_returns_float(self) -> None:
-        e = _make_event(EventType.BASH_FAILURE)
-        score = _score_durability(e)
+        score = _score_durability("this is a permanent decision", NodeType.OBSERVATION)
         assert isinstance(score, float)
 
     def test_score_durability_in_unit_interval(self) -> None:
-        e = _make_event(EventType.FILE_WRITE)
-        score = _score_durability(e)
+        score = _score_durability("temporary fix for now", NodeType.OBSERVATION)
         assert 0.0 <= score <= 1.0
 
     def test_candidate_node_type_field(self) -> None:
@@ -1088,18 +1085,15 @@ class {cn}:
 """,
     lambda cn: f"""\
 class {cn}:
-    def test_score_durability_file_write_positive(self) -> None:
-        e = _make_event(EventType.FILE_WRITE)
-        assert _score_durability(e) > 0.0
+    def test_score_durability_observation_positive(self) -> None:
+        assert _score_durability("key design decision here", NodeType.OBSERVATION) > 0.0
 
-    def test_score_durability_bash_failure_in_range(self) -> None:
-        e = _failure_event()
-        score = _score_durability(e)
+    def test_score_durability_in_range(self) -> None:
+        score = _score_durability("we should always use async", NodeType.CONVENTION)
         assert 0.0 <= score <= 1.0
 
     def test_is_retracted_returns_bool(self) -> None:
-        e = _make_event(EventType.ASSISTANT_MESSAGE, data={{"text": "done"}})
-        result = _is_retracted(e)
+        result = _is_retracted("actually never mind, let me redo this")
         assert isinstance(result, bool)
 
     def test_durability_threshold_is_float(self) -> None:
