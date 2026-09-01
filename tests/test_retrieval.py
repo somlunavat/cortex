@@ -1369,3 +1369,50 @@ class TestGraphChannelHopValues:
         assert len(valid) == 3
         result = graph_channel([valid[0]], graph, valid)
         assert len(result) == 3
+
+
+class TestRetrieval20260901A:
+    def test_token_budget_positive(self) -> None:
+        assert TOKEN_BUDGET > 0
+
+    def test_bm25_weight_positive(self) -> None:
+        assert BM25_WEIGHT > 0.0
+
+    def test_vector_weight_positive(self) -> None:
+        assert VECTOR_WEIGHT > 0.0
+
+    def test_graph_weight_positive(self) -> None:
+        assert GRAPH_WEIGHT > 0.0
+
+    def test_weights_sum_to_one(self) -> None:
+        total = BM25_WEIGHT + VECTOR_WEIGHT + GRAPH_WEIGHT
+        assert abs(total - 1.0) < 1e-6
+
+    def test_top_k_positive(self) -> None:
+        assert TOP_K > 0
+
+
+class TestRetrieval20260901B:
+    def test_retrieve_empty_graph_returns_empty(self, graph: Graph) -> None:
+        results = retrieve("anything", TEST_PROJECT, graph)
+        assert results == []
+
+    def test_retrieve_returns_list(self, graph: Graph) -> None:
+        results = retrieve("query", TEST_PROJECT, graph)
+        assert isinstance(results, list)
+
+    def test_retrieve_budget_parameter_accepted(self, graph: Graph) -> None:
+        results = retrieve("query", TEST_PROJECT, graph, budget_tokens=5000)
+        assert isinstance(results, list)
+
+    def test_format_injection_block_empty(self) -> None:
+        block = format_injection_block([], TEST_PROJECT)
+        assert isinstance(block, str)
+
+    def test_format_injection_block_returns_str(self) -> None:
+        block = format_injection_block([], TEST_PROJECT)
+        assert isinstance(block, str)
+
+    def test_fuse_scores_all_empty(self) -> None:
+        result = fuse_scores([], [], [])
+        assert isinstance(result, list)
