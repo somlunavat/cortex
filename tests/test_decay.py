@@ -1040,3 +1040,55 @@ class TestDecay20260901B:
 
     def test_tier2_age_days_positive(self) -> None:
         assert TIER2_PROMOTION_AGE_DAYS > 0
+
+
+class TestDecay20260901C:
+    def test_tier1_node_weight_decreases(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=4.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
+        if nodes:
+            assert nodes[0].weight < 4.0
+
+    def test_tier2_node_weight_decreases(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=2, weight=4.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=2)
+        if nodes:
+            assert nodes[0].weight < 4.0
+
+    def test_tier3_node_never_decays(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=3, weight=4.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=3)
+        assert nodes[0].weight == pytest.approx(4.0)
+
+    def test_decayed_count_is_one(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=4.0))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed == 1
+
+    def test_two_nodes_both_decayed(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=4.0))
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=3.0, text="b"))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed == 2
+
+    def test_tier1_decay_rate_applied(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=2.0))
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT, tier=1)
+        if nodes:
+            assert nodes[0].weight == pytest.approx(2.0 * TIER1_DECAY_RATE, abs=1e-4)
