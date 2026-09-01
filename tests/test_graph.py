@@ -3105,3 +3105,181 @@ class TestGraph20260901A:
         result = graph.get_node(node_id)
         assert result is not None
         assert result.tier == 2
+
+
+class TestWriteEdgeBehavior:
+    def test_self_loop_raises(self, graph: Graph, dummy_embedding: np.ndarray) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding))
+        with pytest.raises(ValueError):
+            graph.write_edge(nid, nid)
+
+    def test_edge_strength_starts_at_one(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        edges = graph.get_edges(a)
+        assert edges[0].strength == 1.0
+
+    def test_duplicate_edge_increments_strength(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        graph.write_edge(a, b)
+        edges = graph.get_edges(a)
+        assert edges[0].strength == 2.0
+
+    def test_edge_appears_in_both_directions(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        assert len(graph.get_edges(a)) == 1
+        assert len(graph.get_edges(b)) == 1
+
+    def test_two_edges_from_same_node(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a = graph.write_node(_make_node(dummy_embedding, text="hub"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        c = graph.write_node(_make_node(dummy_embedding, text="c"))
+        graph.write_edge(a, b)
+        graph.write_edge(a, c)
+        assert len(graph.get_edges(a)) == 2
+
+    def test_get_edges_returns_edge_objects(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        from core.graph import Edge
+
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        edges = graph.get_edges(a)
+        assert all(isinstance(e, Edge) for e in edges)
+
+
+# ---------------------------------------------------------------------------
+# merge_node — weight, text, rationale, session_count
+# ---------------------------------------------------------------------------
+
+
+class TestMergeNodeBehavior:
+    def test_merge_bumps_weight(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(
+            _make_node(dummy_embedding, text="long original text here")
+        )
+        node_before = graph.get_node(nid)
+        assert node_before is not None
+        weight_before = node_before.weight
+        candidate = _make_node(dummy_embedding, text="short")
+        graph.merge_node(nid, candidate)
+        node_after = graph.get_node(nid)
+        assert node_after is not None
+        assert node_after.weight > weight_before
+
+    def test_merge_keeps_longer_text(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, text="a long existing text"))
+        candidate = _make_node(dummy_embedding, text="short")
+        graph.merge_node(nid, candidate)
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.text == "short"
+
+    def test_merge_keeps_existing_rationale(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(
+            _make_node(dummy_embedding, text="text", rationale="existing rationale")
+        )
+        candidate = _make_node(dummy_embedding, text="t", rationale="new rationale")
+        graph.merge_node(nid, candidate)
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.rationale == "existing rationale"
+
+    def test_merge_fills_null_rationale(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, text="text", rationale=None))
+        candidate = _make_node(dummy_embedding, text="t", rationale="filled rationale")
+        graph.merge_node(nid, candidate)
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.rationale == "filled rationale"
+
+    def test_merge_increments_session_count(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, text="long text here"))
+        before = graph.get_node(nid)
+        assert before is not None
+        count_before = before.session_count
+        graph.merge_node(nid, _make_node(dummy_embedding, text="x"))
+        after = graph.get_node(nid)
+        assert after is not None
+        assert after.session_count == count_before + 1
+
+    def test_merge_nonexistent_node_is_noop(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        candidate = _make_node(dummy_embedding, text="candidate")
+        graph.merge_node("nonexistent-id", candidate)  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# update_node_tier — tier and precision updated
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateNodeTierBehavior:
+    def test_tier_updated_to_two(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(nid, 2, 8, None, int(time.time()))
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.tier == 2
+
+    def test_precision_bits_updated(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(nid, 2, 8, None, int(time.time()))
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.precision_bits == 8
+
+    def test_tier_three_promotion(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding, tier=1))
+        graph.update_node_tier(nid, 3, 2, None, int(time.time()))
+        node = graph.get_node(nid)
+        assert node is not None
+        assert node.tier == 3
+
+    def test_nonexistent_node_update_is_noop(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.update_node_tier("no-such-id", 2, 8, None, int(time.time()))
+        assert graph.get_node("no-such-id") is None
+
+    def test_get_node_returns_none_for_unknown_id(self, graph: Graph) -> None:
+        result = graph.get_node("totally-unknown-uuid")
+        assert result is None
+
+    def test_write_node_returns_string_id(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        nid = graph.write_node(_make_node(dummy_embedding))
+        assert isinstance(nid, str) and len(nid) > 0
