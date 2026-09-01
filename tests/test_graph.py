@@ -3064,3 +3064,44 @@ class TestQueryNodesPageSortCols:
         graph.write_node(_make_node(dummy_embedding, text="high weight", weight=9.9))
         nodes, _ = graph.query_nodes_page(TEST_PROJECT, sort_col="weight")
         assert nodes[0].weight > nodes[1].weight
+
+
+class TestGraph20260901A:
+    def test_write_node_returns_string(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        assert isinstance(node_id, str)
+
+    def test_write_node_id_nonempty(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        assert len(node_id) > 0
+
+    def test_get_node_returns_node(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        result = graph.get_node(node_id)
+        assert result is not None
+
+    def test_get_node_text_matches(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, text="hello world"))
+        result = graph.get_node(node_id)
+        assert result is not None
+        assert result.text == "hello world"
+
+    def test_get_node_unknown_returns_none(self, graph: Graph) -> None:
+        result = graph.get_node("00000000-0000-0000-0000-000000000000")
+        assert result is None
+
+    def test_write_node_tier_preserved(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, tier=2))
+        result = graph.get_node(node_id)
+        assert result is not None
+        assert result.tier == 2
