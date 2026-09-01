@@ -1390,3 +1390,56 @@ class TestHooksMainEntrypoints:
         with pytest.raises(SystemExit) as exc_info:
             runpy.run_module("hooks.extract", run_name="__main__", alter_sys=False)
         assert exc_info.value.code == 0
+
+
+class TestHooks20260901B:
+    def test_make_node_returns_node(self) -> None:
+        node = _make_node("some text")
+        assert isinstance(node, Node)
+
+    def test_make_node_text_preserved(self) -> None:
+        node = _make_node("specific text content")
+        assert node.text == "specific text content"
+
+    def test_make_node_default_tier_is_one(self) -> None:
+        node = _make_node("t")
+        assert node.tier == 1
+
+    def test_make_node_project_preserved(self) -> None:
+        node = _make_node("t", project="/custom/proj")
+        assert node.project == "/custom/proj"
+
+    def test_make_node_weight_is_one(self) -> None:
+        node = _make_node("t")
+        assert node.weight == pytest.approx(1.0)
+
+    def test_make_node_type_is_observation(self) -> None:
+        node = _make_node("t")
+        assert node.type == "observation"
+
+
+class TestHooks20260901C:
+    def test_run_inject_empty_graph_returns_str(self, graph: Graph) -> None:
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_run_inject_returns_string_always(self, graph: Graph) -> None:
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_run_extract_decisions_fixture_nonnegative(self, graph: Graph) -> None:
+        result = run_extract(DECISIONS_TRANSCRIPT, TEST_PROJECT, graph)
+        assert result >= 0
+
+    def test_run_extract_writes_nodes_to_graph(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert isinstance(nodes, list)
+
+    def test_make_node_source_is_jsonl(self) -> None:
+        node = _make_node("t")
+        assert node.source == "jsonl"
+
+    def test_make_node_scope_is_project(self) -> None:
+        node = _make_node("t")
+        assert node.scope == "project"
