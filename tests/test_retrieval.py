@@ -1390,3 +1390,29 @@ class TestRetrieval20260901A:
 
     def test_top_k_positive(self) -> None:
         assert TOP_K > 0
+
+
+class TestRetrieval20260901B:
+    def test_retrieve_empty_graph_returns_empty(self, graph: Graph) -> None:
+        results = retrieve("anything", TEST_PROJECT, graph)
+        assert results == []
+
+    def test_retrieve_returns_list(self, graph: Graph) -> None:
+        results = retrieve("query", TEST_PROJECT, graph)
+        assert isinstance(results, list)
+
+    def test_retrieve_budget_parameter_accepted(self, graph: Graph) -> None:
+        results = retrieve("query", TEST_PROJECT, graph, budget_tokens=5000)
+        assert isinstance(results, list)
+
+    def test_format_injection_block_empty(self) -> None:
+        block = format_injection_block([], TEST_PROJECT)
+        assert isinstance(block, str)
+
+    def test_format_injection_block_returns_str(self) -> None:
+        block = format_injection_block([], TEST_PROJECT)
+        assert isinstance(block, str)
+
+    def test_fuse_scores_all_empty(self) -> None:
+        result = fuse_scores([], [], [])
+        assert isinstance(result, list)
