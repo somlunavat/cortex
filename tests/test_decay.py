@@ -1242,3 +1242,31 @@ class TestDecayResultFields:
             "nodes_evicted",
             "nodes_promoted",
         } == field_names
+
+
+class TestDecay20260902A:
+    def test_promotion_weight_positive(self) -> None:
+        assert TIER1_PROMOTION_WEIGHT > 0.0
+
+    def test_tier2_promotion_weight_exceeds_tier1(self) -> None:
+        assert TIER2_PROMOTION_WEIGHT > TIER1_PROMOTION_WEIGHT
+
+    def test_tier1_promotion_sessions_positive(self) -> None:
+        assert TIER1_PROMOTION_SESSIONS > 0
+
+    def test_decay_result_field_count(self) -> None:
+        from dataclasses import fields
+
+        assert len(fields(DecayResult)) == 4
+
+    def test_decay_result_nodes_decayed_field(self) -> None:
+        r = DecayResult(
+            project="/p", nodes_decayed=5, nodes_evicted=1, nodes_promoted=0
+        )
+        assert r.nodes_decayed == 5
+
+    def test_decay_result_nodes_evicted_field(self) -> None:
+        r = DecayResult(
+            project="/p", nodes_decayed=0, nodes_evicted=3, nodes_promoted=0
+        )
+        assert r.nodes_evicted == 3
