@@ -1242,3 +1242,105 @@ class TestDecayResultFields:
             "nodes_evicted",
             "nodes_promoted",
         } == field_names
+
+
+class TestDecay20260902A:
+    def test_promotion_weight_positive(self) -> None:
+        assert TIER1_PROMOTION_WEIGHT > 0.0
+
+    def test_tier2_promotion_weight_exceeds_tier1(self) -> None:
+        assert TIER2_PROMOTION_WEIGHT > TIER1_PROMOTION_WEIGHT
+
+    def test_tier1_promotion_sessions_positive(self) -> None:
+        assert TIER1_PROMOTION_SESSIONS > 0
+
+    def test_decay_result_field_count(self) -> None:
+        from dataclasses import fields
+
+        assert len(fields(DecayResult)) == 4
+
+    def test_decay_result_nodes_decayed_field(self) -> None:
+        r = DecayResult(
+            project="/p", nodes_decayed=5, nodes_evicted=1, nodes_promoted=0
+        )
+        assert r.nodes_decayed == 5
+
+    def test_decay_result_nodes_evicted_field(self) -> None:
+        r = DecayResult(
+            project="/p", nodes_decayed=0, nodes_evicted=3, nodes_promoted=0
+        )
+        assert r.nodes_evicted == 3
+
+
+class TestDecay20260902B:
+    def test_tier3_not_decayed_in_count(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, weight=2.0))
+        graph.write_node(_make_node(dummy_embedding, tier=3, weight=2.0, text="t3"))
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed == 1
+
+    def test_other_project_not_decayed(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(
+            _make_node(dummy_embedding, tier=1, weight=3.0, project="/other")
+        )
+        run_decay(graph, TEST_PROJECT)
+        nodes = graph.get_all_nodes(project="/other", tier=1)
+        assert nodes[0].weight == pytest.approx(3.0, abs=1e-6)
+
+    def test_decay_result_promoted_field(self) -> None:
+        r = DecayResult(
+            project="/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=2
+        )
+        assert r.nodes_promoted == 2
+
+    def test_decay_result_project_str(self) -> None:
+        r = DecayResult(
+            project="/p", nodes_decayed=0, nodes_evicted=0, nodes_promoted=0
+        )
+        assert isinstance(r.project, str)
+
+    def test_tier1_eviction_threshold_lt_one(self) -> None:
+        assert TIER1_EVICTION_THRESHOLD < 1.0
+
+    def test_tier2_promotion_age_days_at_least_one(self) -> None:
+        assert TIER2_PROMOTION_AGE_DAYS >= 1
+
+
+class TestDecay20260902C:
+    def test_meets_promotion_tier1_below_threshold(
+        self, dummy_embedding: np.ndarray
+    ) -> None:
+        import time as _time
+
+        node = _make_node(
+            dummy_embedding,
+            tier=1,
+            weight=TIER1_PROMOTION_WEIGHT - 1.0,
+            session_count=TIER1_PROMOTION_SESSIONS,
+        )
+        assert not _meets_promotion_criteria(
+            node, TIER1_PROMOTION_WEIGHT - 1.0, int(_time.time())
+        )
+
+    def test_meets_promotion_tier3_never(self, dummy_embedding: np.ndarray) -> None:
+        import time as _time
+
+        node = _make_node(dummy_embedding, tier=3, weight=999.0, session_count=999)
+        assert not _meets_promotion_criteria(node, 999.0, int(_time.time()))
+
+    def test_seconds_per_day_equals_24h(self) -> None:
+        assert SECONDS_PER_DAY == 60 * 60 * 24
+
+    def test_tier2_decay_rate_positive(self) -> None:
+        assert TIER2_DECAY_RATE > 0.0
+
+    def test_tier1_decay_rate_positive(self) -> None:
+        assert TIER1_DECAY_RATE > 0.0
+
+    def test_decay_result_zero_all(self, graph: Graph) -> None:
+        r = run_decay(graph, TEST_PROJECT)
+        assert r.nodes_decayed == r.nodes_evicted == r.nodes_promoted == 0
