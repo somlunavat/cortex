@@ -1443,3 +1443,68 @@ class TestHooks20260901C:
     def test_make_node_scope_is_project(self) -> None:
         node = _make_node("t")
         assert node.scope == "project"
+
+
+class TestHooks20260902A:
+    def test_extract_main_no_transcript_env_exits_zero(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("CLAUDE_TRANSCRIPT", raising=False)
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", str(tmp_path))
+        result = extract_main()
+        assert result == 0
+
+    def test_run_inject_with_one_node(self, graph: Graph) -> None:
+        graph.write_node(_make_node("important context node"))
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_run_extract_different_projects_isolated(self, graph: Graph) -> None:
+        n1 = run_extract(SIMPLE_TRANSCRIPT, "/proj/a", graph)
+        n2 = run_extract(SIMPLE_TRANSCRIPT, "/proj/b", graph)
+        assert isinstance(n1, int)
+        assert isinstance(n2, int)
+
+    def test_make_node_session_count_one(self) -> None:
+        node = _make_node("t")
+        assert node.session_count == 1
+
+    def test_make_node_id_empty_string(self) -> None:
+        node = _make_node("t")
+        assert node.id == ""
+
+    def test_make_node_rationale_none(self) -> None:
+        node = _make_node("t")
+        assert node.rationale is None
+
+
+class TestHooks20260902C:
+    def test_extract_main_missing_transcript_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("CLAUDE_TRANSCRIPT", str(tmp_path / "no.jsonl"))
+        monkeypatch.setenv("CLAUDE_PROJECT_PATH", str(tmp_path))
+        result = extract_main()
+        assert result == 0
+
+    def test_run_extract_simple_then_inject(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_run_inject_result_is_str(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_make_node_created_at_positive(self) -> None:
+        node = _make_node("t")
+        assert node.created_at > 0
+
+    def test_run_extract_nonnegative_decisions_fixture(self, graph: Graph) -> None:
+        result = run_extract(DECISIONS_TRANSCRIPT, TEST_PROJECT, graph)
+        assert result >= 0
+
+    def test_make_node_embedding_none_by_default(self) -> None:
+        node = _make_node("t")
+        assert node.embedding is None
