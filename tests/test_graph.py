@@ -3283,3 +3283,60 @@ class TestUpdateNodeTierBehavior:
     ) -> None:
         nid = graph.write_node(_make_node(dummy_embedding))
         assert isinstance(nid, str) and len(nid) > 0
+
+
+class TestGraph20260902B:
+    def test_write_node_rationale_none(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding, rationale=None))
+        result = graph.get_node(node_id)
+        assert result is not None
+        assert result.rationale is None
+
+    def test_write_node_rationale_preserved(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(
+            _make_node(dummy_embedding, rationale="important context")
+        )
+        result = graph.get_node(node_id)
+        assert result is not None
+        assert result.rationale == "important context"
+
+    def test_write_edge_strength_starts_at_one(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        edges = graph.get_edges(a)
+        assert edges[0].strength == pytest.approx(1.0)
+
+    def test_get_all_nodes_two_tiers(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        graph.write_node(_make_node(dummy_embedding, tier=1, text="t1"))
+        graph.write_node(_make_node(dummy_embedding, tier=2, text="t2"))
+        all_nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        tiers = {n.tier for n in all_nodes}
+        assert 1 in tiers
+        assert 2 in tiers
+
+    def test_write_two_edges_from_hub(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        hub = graph.write_node(_make_node(dummy_embedding, text="hub"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        c = graph.write_node(_make_node(dummy_embedding, text="c"))
+        graph.write_edge(hub, b)
+        graph.write_edge(hub, c)
+        assert len(graph.get_edges(hub)) == 2
+
+    def test_node_session_count_default(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        result = graph.get_node(node_id)
+        assert result is not None
+        assert result.session_count >= 1
