@@ -1262,3 +1262,28 @@ class TestDecay20260903A:
 
     def test_tier2_promotion_sessions_exceeds_tier1(self) -> None:
         assert TIER2_PROMOTION_SESSIONS >= TIER1_PROMOTION_SESSIONS
+
+
+class TestDecay20260903B:
+    def test_empty_graph_decayed_zero(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_decayed == 0
+
+    def test_empty_graph_evicted_zero(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_evicted == 0
+
+    def test_empty_graph_promoted_zero(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert result.nodes_promoted == 0
+
+    def test_result_project_matches(self, graph: Graph) -> None:
+        result = run_decay(graph, "/my/project")
+        assert result.project == "/my/project"
+
+    def test_result_is_decay_result_type(self, graph: Graph) -> None:
+        result = run_decay(graph, TEST_PROJECT)
+        assert isinstance(result, DecayResult)
+
+    def test_tier2_age_days_positive(self) -> None:
+        assert TIER2_PROMOTION_AGE_DAYS > 0
