@@ -1098,3 +1098,33 @@ class TestParser20260903A:
 
     def test_hotspot_write_threshold_integer(self) -> None:
         assert isinstance(HOTSPOT_WRITE_THRESHOLD, int)
+
+
+class TestParser20260903B:
+    def test_parse_transcript_nonexistent_raises(self, tmp_path: Path) -> None:
+        import pytest as _pytest
+
+        with _pytest.raises(FileNotFoundError):
+            list(parse_transcript(tmp_path / "missing.jsonl"))
+
+    def test_parse_transcript_empty_file_returns_empty(self, tmp_path: Path) -> None:
+        f = tmp_path / "t.jsonl"
+        f.write_text("")
+        events = list(parse_transcript(f))
+        assert events == []
+
+    def test_detect_co_occurring_writes_no_events(self) -> None:
+        result = detect_co_occurring_writes([])
+        assert result == ()
+
+    def test_detect_hotspots_no_events(self) -> None:
+        result = detect_hotspots([])
+        assert len(result) == 0
+
+    def test_extract_prose_turns_no_events(self) -> None:
+        result = list(extract_prose_turns([]))
+        assert result == []
+
+    def test_parsed_event_has_type_field(self) -> None:
+        e = _make_event(EventType.FILE_WRITE)
+        assert e.type == EventType.FILE_WRITE
