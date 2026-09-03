@@ -1078,3 +1078,78 @@ class TestParser20260901C:
     def test_event_type_values_are_strings(self) -> None:
         for member in EventType:
             assert isinstance(member.value, str)
+
+
+class TestParser20260903A:
+    def test_event_type_file_write_value(self) -> None:
+        assert EventType.FILE_WRITE.value == "file_write"
+
+    def test_event_type_bash_failure_value(self) -> None:
+        assert EventType.BASH_FAILURE.value == "bash_failure"
+
+    def test_event_type_assistant_message_value(self) -> None:
+        assert EventType.ASSISTANT_MESSAGE.value == "assistant_message"
+
+    def test_co_occurrence_window_positive(self) -> None:
+        assert CO_OCCURRENCE_WINDOW_SECONDS > 0
+
+    def test_hotspot_write_threshold_positive(self) -> None:
+        assert HOTSPOT_WRITE_THRESHOLD > 0
+
+    def test_hotspot_write_threshold_integer(self) -> None:
+        assert isinstance(HOTSPOT_WRITE_THRESHOLD, int)
+
+
+class TestParser20260903B:
+    def test_parse_transcript_nonexistent_raises(self, tmp_path: Path) -> None:
+        import pytest as _pytest
+
+        with _pytest.raises(FileNotFoundError):
+            list(parse_transcript(tmp_path / "missing.jsonl"))
+
+    def test_parse_transcript_empty_file_returns_empty(self, tmp_path: Path) -> None:
+        f = tmp_path / "t.jsonl"
+        f.write_text("")
+        events = list(parse_transcript(f))
+        assert events == []
+
+    def test_detect_co_occurring_writes_no_events(self) -> None:
+        result = detect_co_occurring_writes([])
+        assert result == ()
+
+    def test_detect_hotspots_no_events(self) -> None:
+        result = detect_hotspots([])
+        assert len(result) == 0
+
+    def test_extract_prose_turns_no_events(self) -> None:
+        result = list(extract_prose_turns([]))
+        assert result == []
+
+    def test_parsed_event_has_type_field(self) -> None:
+        e = _make_event(EventType.FILE_WRITE)
+        assert e.type == EventType.FILE_WRITE
+
+
+class TestParser20260903C:
+    def test_make_event_timestamp_default(self) -> None:
+        e = _make_event(EventType.BASH_FAILURE)
+        assert e.timestamp == 1000
+
+    def test_make_event_data_default_empty(self) -> None:
+        e = _make_event(EventType.ASSISTANT_MESSAGE)
+        assert e.data == {}
+
+    def test_make_write_event_data_has_path(self) -> None:
+        e = _make_write_event("/some/file.py")
+        assert e.data["path"] == "/some/file.py"
+
+    def test_make_write_event_type_is_file_write(self) -> None:
+        e = _make_write_event("/a.py")
+        assert e.type == EventType.FILE_WRITE
+
+    def test_co_occurrence_window_gte_ten(self) -> None:
+        assert CO_OCCURRENCE_WINDOW_SECONDS >= 10
+
+    def test_event_type_values_are_strings(self) -> None:
+        for member in EventType:
+            assert isinstance(member.value, str)
