@@ -1357,3 +1357,32 @@ class TestExtractor20260901C:
         candidates = run_extraction(events, TEST_PROJECT, [], 1000)
         for c in candidates:
             assert isinstance(c.type, NodeType)
+
+
+class TestExtractor20260904B:
+    def test_candidate_node_project_field(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT, [], 1000)
+        for c in candidates:
+            assert hasattr(c, "project")
+
+    def test_candidate_node_rationale_attribute(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        candidates = run_extraction(events, TEST_PROJECT, [], 1000)
+        for c in candidates:
+            assert hasattr(c, "rationale")
+
+    def test_source_type_git_exists(self) -> None:
+        assert hasattr(SourceType, "GIT")
+
+    def test_node_type_values_are_strings(self) -> None:
+        for member in NodeType:
+            assert isinstance(member.value, str)
+
+    def test_scope_type_values_are_strings(self) -> None:
+        for member in ScopeType:
+            assert isinstance(member.value, str)
+
+    def test_source_type_values_are_strings(self) -> None:
+        for member in SourceType:
+            assert isinstance(member.value, str)
