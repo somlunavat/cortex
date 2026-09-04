@@ -1078,3 +1078,31 @@ class TestParser20260901C:
     def test_event_type_values_are_strings(self) -> None:
         for member in EventType:
             assert isinstance(member.value, str)
+
+
+class TestParser20260904B:
+    def test_parse_transcript_simple_fixture(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        assert len(events) > 0
+
+    def test_parse_transcript_returns_parsed_events(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        assert all(isinstance(e, ParsedEvent) for e in events)
+
+    def test_parse_transcript_events_have_timestamp(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        assert all(isinstance(e.timestamp, int) for e in events)
+
+    def test_parse_transcript_events_have_type(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        assert all(isinstance(e.type, EventType) for e in events)
+
+    def test_detect_hotspots_returns_iterable(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        result = detect_hotspots(events)
+        assert hasattr(result, "__iter__")
+
+    def test_extract_prose_turns_returns_iterable(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        result = list(extract_prose_turns(events))
+        assert isinstance(result, list)
