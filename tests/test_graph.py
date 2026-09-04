@@ -3340,3 +3340,52 @@ class TestGraph20260904B:
         result = graph.get_node(node_id)
         assert result is not None
         assert result.session_count >= 1
+
+
+class TestGraph20260904C:
+    def test_merge_node_noop_for_unknown_id(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node = _make_node(dummy_embedding)
+        graph.merge_node("00000000-0000-0000-0000-000000000000", node)
+
+    def test_get_edges_returns_edge_objects(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        from core.graph import Edge
+
+        a = graph.write_node(_make_node(dummy_embedding, text="a"))
+        b = graph.write_node(_make_node(dummy_embedding, text="b"))
+        graph.write_edge(a, b)
+        edges = graph.get_edges(a)
+        assert all(isinstance(e, Edge) for e in edges)
+
+    def test_write_node_id_is_uuid(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        import uuid
+
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        uuid.UUID(node_id)
+
+    def test_three_nodes_isolated(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        ids = [
+            graph.write_node(_make_node(dummy_embedding, text=t))
+            for t in ("x", "y", "z")
+        ]
+        for node_id in ids:
+            assert graph.get_edges(node_id) == []
+
+    def test_get_node_weight_is_float(
+        self, graph: Graph, dummy_embedding: np.ndarray
+    ) -> None:
+        node_id = graph.write_node(_make_node(dummy_embedding))
+        result = graph.get_node(node_id)
+        assert result is not None
+        assert isinstance(result.weight, float)
+
+    def test_get_all_nodes_returns_list(self, graph: Graph) -> None:
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert isinstance(nodes, list)
