@@ -1416,3 +1416,41 @@ class TestRetrieval20260901B:
     def test_fuse_scores_all_empty(self) -> None:
         result = fuse_scores([], [], [])
         assert isinstance(result, list)
+
+
+class TestRetrieval20260904B:
+    def test_retrieve_with_node_returns_list(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        emb = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("the quick brown fox", embedding=emb))
+        results = retrieve("quick", TEST_PROJECT, graph)
+        assert isinstance(results, list)
+
+    def test_vector_channel_empty_nodes(self, rng: np.random.Generator) -> None:
+        query_emb = rng.random(384).astype(np.float32)
+        results = vector_channel(query_emb, [])
+        assert isinstance(results, list)
+
+    def test_bm25_channel_with_index(self) -> None:
+        node = _make_node("hello world test")
+        index = build_bm25_index([node])
+        results = bm25_channel("hello", [node], index)
+        assert isinstance(results, list)
+
+    def test_format_injection_block_no_crash(
+        self, graph: Graph, rng: np.random.Generator
+    ) -> None:
+        emb = rng.random(384).astype(np.float32)
+        graph.write_node(_make_node("some content", embedding=emb))
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        block = format_injection_block(nodes, TEST_PROJECT)
+        assert isinstance(block, str)
+
+    def test_graph_channel_empty_nodes(self, graph: Graph) -> None:
+        results = graph_channel([], graph, [])
+        assert isinstance(results, list)
+
+    def test_fuse_scores_empty_is_list(self) -> None:
+        result = fuse_scores([], [], [])
+        assert result == []
