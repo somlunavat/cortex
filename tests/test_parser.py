@@ -1078,3 +1078,61 @@ class TestParser20260901C:
     def test_event_type_values_are_strings(self) -> None:
         for member in EventType:
             assert isinstance(member.value, str)
+
+
+class TestParser20260904B:
+    def test_parse_transcript_simple_fixture(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        assert len(events) > 0
+
+    def test_parse_transcript_returns_parsed_events(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        assert all(isinstance(e, ParsedEvent) for e in events)
+
+    def test_parse_transcript_events_have_timestamp(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        assert all(isinstance(e.timestamp, int) for e in events)
+
+    def test_parse_transcript_events_have_type(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        assert all(isinstance(e.type, EventType) for e in events)
+
+    def test_detect_hotspots_returns_iterable(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        result = detect_hotspots(events)
+        assert hasattr(result, "__iter__")
+
+    def test_extract_prose_turns_returns_iterable(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        result = list(extract_prose_turns(events))
+        assert isinstance(result, list)
+
+
+class TestParser20260904C:
+    def test_summarize_session_empty_returns_summary(self) -> None:
+        result = summarize_session([])
+        assert result is not None
+
+    def test_summarize_session_simple_fixture(self) -> None:
+        events = list(parse_transcript(SIMPLE_FIXTURE))
+        result = summarize_session(events)
+        assert result is not None
+
+    def test_make_event_default_session_id(self) -> None:
+        e = _make_event(EventType.FILE_WRITE)
+        assert e.session_id == "s1"
+
+    def test_event_type_members_nonempty(self) -> None:
+        assert len(list(EventType)) > 0
+
+    def test_write_jsonl_creates_file(self, tmp_path: Path) -> None:
+        p = _write_jsonl(tmp_path, [{"type": "test"}])
+        assert p.exists()
+
+    def test_write_jsonl_roundtrip(self, tmp_path: Path) -> None:
+        import json
+
+        p = _write_jsonl(tmp_path, [{"x": 1}, {"x": 2}])
+        lines = [json.loads(ln) for ln in p.read_text().splitlines() if ln]
+        assert lines[0]["x"] == 1
+        assert lines[1]["x"] == 2
