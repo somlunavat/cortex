@@ -172,20 +172,57 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     """Compute cosine similarity between two embedding vectors.
 
     Args:
-        a: First float32 numpy array.
-        b: Second float32 numpy array.
+        a: Numpy array (any float dtype; converted to float32 if needed).
+        b: Numpy array (any float dtype; converted to float32 if needed).
 
     Returns:
         Cosine similarity in the range [-1.0, 1.0]. Returns 0.0 if either
         vector has zero norm.
     """
-    a_f = a.astype(np.float32)
-    b_f = b.astype(np.float32)
+    a_f = a if a.dtype == np.float32 else a.astype(np.float32)
+    b_f = b if b.dtype == np.float32 else b.astype(np.float32)
     norm_a = float(np.linalg.norm(a_f))
     norm_b = float(np.linalg.norm(b_f))
     if norm_a == 0.0 or norm_b == 0.0:
         return 0.0
     return float(np.dot(a_f, b_f) / (norm_a * norm_b))
+
+
+def cosine_similarity_batch(
+    query: np.ndarray,
+    embeddings: list[np.ndarray],
+) -> list[float]:
+    """Compute cosine similarity between a query and a list of embeddings.
+
+    Stacks all embeddings into a matrix and computes dot products in a single
+    BLAS call — significantly faster than calling cosine_similarity() in a
+    loop when the candidate list is large.
+
+    Args:
+        query: Float32 query vector of shape (D,).
+        embeddings: List of float32 vectors, each of shape (D,).
+
+    Returns:
+        List of cosine similarities in the same order as embeddings. Vectors
+        with zero norm receive a score of 0.0.
+    """
+    if not embeddings:
+        return []
+
+    q = query if query.dtype == np.float32 else query.astype(np.float32)
+    norm_q = float(np.linalg.norm(q))
+    if norm_q == 0.0:
+        return [0.0] * len(embeddings)
+
+    mat = np.stack(
+        [e if e.dtype == np.float32 else e.astype(np.float32) for e in embeddings]
+    )
+    norms = np.linalg.norm(mat, axis=1)
+    dots = mat @ q
+    with np.errstate(invalid="ignore", divide="ignore"):
+        sims = np.where(norms > 0.0, dots / (norms * norm_q), 0.0)
+
+    return sims.tolist()
 
 
 # ---------------------------------------------------------------------------
