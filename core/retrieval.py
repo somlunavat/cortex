@@ -31,6 +31,10 @@ VECTOR_WEIGHT: float = 0.5
 BM25_WEIGHT: float = 0.3
 GRAPH_WEIGHT: float = 0.2
 
+# Graph-channel traversal: scores assigned to nodes by hop distance
+GRAPH_HOP1_SCORE: float = 0.5  # direct neighbour of a seed node
+GRAPH_HOP2_SCORE: float = 0.25  # two hops away from a seed node
+
 TOP_K: int = 8
 TOKEN_BUDGET: int = 600
 
@@ -143,7 +147,9 @@ def graph_channel(
                 edge.target_id if edge.source_id == seed.id else edge.source_id
             )
             if neighbor_id not in seed_ids:
-                hop_scores[neighbor_id] = max(hop_scores.get(neighbor_id, 0.0), 0.5)
+                hop_scores[neighbor_id] = max(
+                    hop_scores.get(neighbor_id, 0.0), GRAPH_HOP1_SCORE
+                )
 
     hop1_ids = [nid for nid in hop_scores if nid in node_map]
 
@@ -156,7 +162,7 @@ def graph_channel(
                 edge.target_id if edge.source_id == hop1_id else edge.source_id
             )
             if neighbor_id not in seed_ids and neighbor_id not in hop_scores:
-                hop_scores[neighbor_id] = 0.25
+                hop_scores[neighbor_id] = GRAPH_HOP2_SCORE
 
     return [
         ScoredNode(node=node, score=hop_scores.get(node.id, 0.0)) for node in all_nodes
