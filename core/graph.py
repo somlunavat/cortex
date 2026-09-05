@@ -667,6 +667,26 @@ class Graph:
         self._conn.commit()
         return cur.rowcount > 0
 
+    def delete_dangling_edges(self) -> int:
+        """Remove edges whose source or target node no longer exists.
+
+        Dangling edges accumulate when foreign-key enforcement was off (SQLite
+        does not enable FK cascade by default; it requires PRAGMA foreign_keys=ON
+        on each connection). This method cleans up any leftovers.
+
+        Returns:
+            Number of dangling edges deleted.
+        """
+        cur = self._conn.execute(
+            """
+            DELETE FROM edges
+            WHERE source_id NOT IN (SELECT id FROM nodes)
+               OR target_id NOT IN (SELECT id FROM nodes)
+            """
+        )
+        self._conn.commit()
+        return cur.rowcount
+
     # ------------------------------------------------------------------
     # Sessions
     # ------------------------------------------------------------------
