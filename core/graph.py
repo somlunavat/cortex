@@ -501,6 +501,61 @@ class Graph:
 
         return result
 
+    def get_edge(self, source_id: str, target_id: str) -> Edge | None:
+        """Return the edge between two nodes, or None if it does not exist.
+
+        Checks both orderings (source→target and target→source) because edges
+        are stored with the canonical ordering used at write time.
+
+        Args:
+            source_id: UUID of one endpoint.
+            target_id: UUID of the other endpoint.
+
+        Returns:
+            Edge if found, None otherwise.
+        """
+        row = self._conn.execute(
+            """
+            SELECT source_id, target_id, strength, last_seen FROM edges
+            WHERE (source_id = ? AND target_id = ?)
+               OR (source_id = ? AND target_id = ?)
+            LIMIT 1
+            """,
+            (source_id, target_id, target_id, source_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return Edge(
+            source_id=row["source_id"],
+            target_id=row["target_id"],
+            strength=row["strength"],
+            last_seen=row["last_seen"],
+        )
+
+    def delete_edge(self, source_id: str, target_id: str) -> bool:
+        """Delete the edge between two nodes.
+
+        Checks both orderings so callers do not need to know the canonical
+        direction the edge was stored in.
+
+        Args:
+            source_id: UUID of one endpoint.
+            target_id: UUID of the other endpoint.
+
+        Returns:
+            True if an edge was deleted, False if no such edge existed.
+        """
+        cur = self._conn.execute(
+            """
+            DELETE FROM edges
+            WHERE (source_id = ? AND target_id = ?)
+               OR (source_id = ? AND target_id = ?)
+            """,
+            (source_id, target_id, target_id, source_id),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
     # ------------------------------------------------------------------
     # Sessions
     # ------------------------------------------------------------------
