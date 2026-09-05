@@ -835,26 +835,33 @@ def import_(
 
     import time as _time
 
-    from core.embedder import embed
+    from core.embedder import embed_batch
     from core.graph import Node
 
-    imported = 0
     skipped = 0
     now = int(_time.time())
 
+    # First pass: validate and collect records that should be imported
+    valid: list[dict[str, Any]] = []
     for rec in records:
         if not isinstance(rec, dict):
             skipped += 1
             continue
-
         text = str(rec.get("text", "")).strip()
         if not text:
             skipped += 1
             continue
-
         if skip_duplicates and text in existing_texts:
             skipped += 1
             continue
+        valid.append(rec)
+
+    # Batch embed all valid texts in one model forward pass
+    embeddings = embed_batch([str(r.get("text", "")).strip() for r in valid])
+
+    # Second pass: write nodes
+    for rec, embedding in zip(valid, embeddings, strict=True):
+        text = str(rec.get("text", "")).strip()
 
         tier = int(rec.get("tier", 1))
         if tier not in (1, 2, 3):
@@ -872,7 +879,6 @@ def import_(
         if source not in _VALID_SOURCES:
             source = "jsonl"
 
-        embedding = embed(text)
         node = Node(
             id="",
             type=node_type,
@@ -891,8 +897,8 @@ def import_(
         )
         g.write_node(node)
         existing_texts.add(text)
-        imported += 1
 
+    imported = len(valid)
     console.print(
         f"[green]Imported {imported} nodes[/green] "
         f"({skipped} skipped) into {project}"
