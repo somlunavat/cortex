@@ -59,6 +59,17 @@ class DecayResult:
     nodes_decayed: int
     nodes_evicted: int
     nodes_promoted: int
+    dry_run: bool = False
+
+
+@dataclass
+class NodeDecayPreview:
+    """What would happen to one node during a dry-run decay pass."""
+
+    node: Node
+    decayed_weight: float
+    action: str  # "decay" | "evict" | "promote" | "skip"
+    new_tier: int | None  # set when action == "promote"
 
 
 def _decay_rate(tier: int) -> float:
@@ -146,6 +157,60 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
         nodes_evicted=evicted,
         nodes_promoted=promoted,
     )
+
+
+def preview_decay(graph: Graph, project: str) -> list[NodeDecayPreview]:
+    """Return what run_decay() would do without modifying the graph.
+
+    Iterates all project nodes and computes the expected action for each:
+    - 'skip'    — tier-3 node (never touched)
+    - 'evict'   — decayed weight falls below eviction threshold
+    - 'promote' — meets promotion criteria after decay
+    - 'decay'   — weight reduced but node survives
+
+    Args:
+        graph: Graph instance to query (read-only; no writes).
+        project: Absolute project path.
+
+    Returns:
+        List of NodeDecayPreview, one per non-tier-3 node.
+    """
+    nodes = graph.get_all_nodes(project=project)
+    now = int(time.time())
+    previews: list[NodeDecayPreview] = []
+
+    for node in nodes:
+        if node.tier == 3:
+            previews.append(
+                NodeDecayPreview(
+                    node=node, decayed_weight=node.weight, action="skip", new_tier=None
+                )
+            )
+            continue
+
+        delta = node.weight * _decay_rate(node.tier) - node.weight
+        decayed_weight = max(0.0, node.weight + delta)
+
+        if decayed_weight < _eviction_threshold(node.tier):
+            action = "evict"
+            new_tier = None
+        elif _meets_promotion_criteria(node, decayed_weight, now):
+            action = "promote"
+            new_tier = _PROMOTION_TARGET[node.tier][0]
+        else:
+            action = "decay"
+            new_tier = None
+
+        previews.append(
+            NodeDecayPreview(
+                node=node,
+                decayed_weight=decayed_weight,
+                action=action,
+                new_tier=new_tier,
+            )
+        )
+
+    return previews
 
 
 def _promote_node(

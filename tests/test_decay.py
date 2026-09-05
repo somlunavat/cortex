@@ -1241,4 +1241,5 @@ class TestDecayResultFields:
             "nodes_decayed",
             "nodes_evicted",
             "nodes_promoted",
+            "dry_run",
         } == field_names

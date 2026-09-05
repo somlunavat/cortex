@@ -33,7 +33,7 @@ from rich.table import Table
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from cli.config import open_graph
-from core.decay import run_decay
+from core.decay import preview_decay, run_decay
 from core.graph import TOUCH_WEIGHT_BUMP, Graph
 
 app = typer.Typer(
@@ -536,11 +536,63 @@ def decay(
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Preview which nodes would be evicted or promoted without changing anything",
+    ),
 ) -> None:
-    """Run weight decay, eviction, and tier promotion for this project."""
-    g, project = _require_graph(project_path)
-    result = run_decay(g, project)
+    """Run weight decay, eviction, and tier promotion for this project.
 
+    Pass --dry-run to see a preview table of what would change without
+    actually modifying the graph.
+    """
+    g, project = _require_graph(project_path)
+
+    if dry_run:
+        previews = preview_decay(g, project)
+        non_skip = [p for p in previews if p.action != "skip"]
+        if not non_skip:
+            console.print("[dim]No tier-1/2 nodes to decay.[/dim]")
+            return
+
+        table = Table(title=f"Decay preview (dry run) — {project}")
+        table.add_column("Action", style="cyan", width=8)
+        table.add_column("T", justify="center", width=3)
+        table.add_column("Weight", justify="right", width=8)
+        table.add_column("→", justify="center", width=4)
+        table.add_column("New wt", justify="right", width=8)
+        table.add_column("Text")
+        table.add_column("ID", style="dim", width=10)
+
+        action_style = {
+            "evict": "red",
+            "promote": "green",
+            "decay": "yellow",
+        }
+        for p in sorted(non_skip, key=lambda x: x.action):
+            style = action_style.get(p.action, "")
+            new_tier_str = f"→T{p.new_tier}" if p.new_tier else ""
+            table.add_row(
+                f"[{style}]{p.action}[/{style}]" if style else p.action,
+                str(p.node.tier) + new_tier_str,
+                f"{p.node.weight:.3f}",
+                "→",
+                f"{p.decayed_weight:.3f}",
+                p.node.text[:55],
+                p.node.id[:8] + "…",
+            )
+
+        console.print(table)
+        evict_count = sum(1 for p in non_skip if p.action == "evict")
+        promote_count = sum(1 for p in non_skip if p.action == "promote")
+        console.print(
+            f"\n[dim]Would evict {evict_count}, promote {promote_count}, "
+            f"decay {len(non_skip) - evict_count - promote_count} nodes.[/dim]"
+        )
+        return
+
+    result = run_decay(g, project)
     console.print(f"[green]Decay complete[/green] for {project}")
     console.print(f"  Decayed:   {result.nodes_decayed}")
     console.print(f"  Evicted:   {result.nodes_evicted}")
