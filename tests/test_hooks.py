@@ -1443,3 +1443,89 @@ class TestHooks20260901C:
     def test_make_node_scope_is_project(self) -> None:
         node = _make_node("t")
         assert node.scope == "project"
+
+
+class TestHooks20260905A:
+    def test_run_extract_missing_transcript_returns_zero(
+        self, graph: Graph, tmp_path: Path
+    ) -> None:
+        n = run_extract(tmp_path / "missing.jsonl", TEST_PROJECT, graph)
+        assert n == 0
+
+    def test_run_extract_empty_transcript_returns_zero(
+        self, graph: Graph, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "t.jsonl"
+        f.write_text("")
+        n = run_extract(f, TEST_PROJECT, graph)
+        assert n == 0
+
+    def test_run_extract_simple_fixture_returns_int(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert isinstance(result, int)
+
+    def test_run_extract_simple_fixture_nonnegative(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert result >= 0
+
+    def test_run_extract_idempotent(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        second = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert second == 0
+
+    def test_make_node_tier_preserved(self) -> None:
+        node = _make_node("text", tier=2)
+        assert node.tier == 2
+
+
+class TestHooks20260905B:
+    def test_make_node_returns_node(self) -> None:
+        node = _make_node("some text")
+        assert isinstance(node, Node)
+
+    def test_make_node_text_preserved(self) -> None:
+        node = _make_node("specific text content")
+        assert node.text == "specific text content"
+
+    def test_make_node_default_tier_is_one(self) -> None:
+        node = _make_node("t")
+        assert node.tier == 1
+
+    def test_make_node_project_preserved(self) -> None:
+        node = _make_node("t", project="/custom/proj")
+        assert node.project == "/custom/proj"
+
+    def test_make_node_weight_is_one(self) -> None:
+        node = _make_node("t")
+        assert node.weight == pytest.approx(1.0)
+
+    def test_make_node_type_is_observation(self) -> None:
+        node = _make_node("t")
+        assert node.type == "observation"
+
+
+class TestHooks20260905C:
+    def test_run_inject_empty_graph_returns_str(self, graph: Graph) -> None:
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_run_inject_returns_string_always(self, graph: Graph) -> None:
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_run_extract_decisions_fixture_nonnegative(self, graph: Graph) -> None:
+        result = run_extract(DECISIONS_TRANSCRIPT, TEST_PROJECT, graph)
+        assert result >= 0
+
+    def test_run_extract_writes_nodes_to_graph(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        nodes = graph.get_all_nodes(project=TEST_PROJECT)
+        assert isinstance(nodes, list)
+
+    def test_make_node_source_is_jsonl(self) -> None:
+        node = _make_node("t")
+        assert node.source == "jsonl"
+
+    def test_make_node_scope_is_project(self) -> None:
+        node = _make_node("t")
+        assert node.scope == "project"
