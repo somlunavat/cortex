@@ -22,7 +22,7 @@ from rank_bm25 import BM25Okapi
 if TYPE_CHECKING:
     import tiktoken
 
-from core.embedder import cosine_similarity, embed
+from core.embedder import cosine_similarity_batch, embed
 from core.graph import Graph, Node
 
 logger = logging.getLogger(__name__)
@@ -104,13 +104,18 @@ def vector_channel(
     Returns:
         One ScoredNode per input node, ordered to match input order.
     """
-    results: list[ScoredNode] = []
-    for node in nodes:
-        if node.embedding is not None:
-            sim = cosine_similarity(query_embedding, node.embedding)
-            results.append(ScoredNode(node=node, score=max(0.0, float(sim))))
-        else:
-            results.append(ScoredNode(node=node, score=0.0))
+    # Separate nodes with/without embeddings so we can batch the similarity call
+    with_emb = [(i, n) for i, n in enumerate(nodes) if n.embedding is not None]
+    results: list[ScoredNode] = [ScoredNode(node=n, score=0.0) for n in nodes]
+
+    if with_emb:
+        idxs, emb_nodes = zip(*with_emb, strict=True)
+        sims = cosine_similarity_batch(
+            query_embedding, [n.embedding for n in emb_nodes]  # type: ignore[misc]
+        )
+        for idx, node, sim in zip(idxs, emb_nodes, sims, strict=True):
+            results[idx] = ScoredNode(node=node, score=max(0.0, float(sim)))
+
     return results
 
 
