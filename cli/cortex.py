@@ -215,9 +215,14 @@ def recent(
 
 
 @app.command()
-def graph() -> None:
+def graph(
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max nodes to display"),
+) -> None:
     """Print an ASCII adjacency summary of the knowledge graph."""
-    g, project = _require_graph("")
+    g, project = _require_graph(project_path)
     nodes = g.get_all_nodes(project=project)
 
     if not nodes:
@@ -225,25 +230,28 @@ def graph() -> None:
         raise typer.Exit(0)
 
     node_map = {n.id: n for n in nodes}
+    display_nodes = nodes[:limit]
 
-    for node in nodes[:20]:
-        edges = g.get_edges(node.id)
+    # Single batch query instead of one get_edges() call per node
+    edge_map = g.get_edges_for_nodes([n.id for n in display_nodes])
+
+    for node in display_nodes:
         neighbors = []
-        for edge in edges:
+        for edge in edge_map.get(node.id, []):
             neighbor_id = (
                 edge.target_id if edge.source_id == node.id else edge.source_id
             )
             neighbor = node_map.get(neighbor_id)
             if neighbor:
-                neighbors.append(neighbor.text[:30])
+                neighbors.append(f"{neighbor.text[:28]} ({edge.strength:.0f})")
 
         tier_marker = f"T{node.tier}"
         label = node.text[:50]
         neighbor_str = " → " + ", ".join(neighbors[:3]) if neighbors else ""
         console.print(f"[{tier_marker}] {label}{neighbor_str}")
 
-    if len(nodes) > 20:
-        console.print(f"  ... and {len(nodes) - 20} more nodes")
+    if len(nodes) > limit:
+        console.print(f"  ... and {len(nodes) - limit} more nodes")
 
 
 @app.command()
@@ -296,6 +304,27 @@ def inspect(
     table.add_row("last_accessed", _fmt_ts(target.last_accessed))
     table.add_row("created_at", _fmt_ts(target.created_at))
     console.print(table)
+
+    edges = g.get_edges(node_id)
+    if edges:
+        edge_table = Table(title="Connected nodes")
+        edge_table.add_column("Neighbor ID", style="dim")
+        edge_table.add_column("Text")
+        edge_table.add_column("Strength", justify="right")
+        edge_table.add_column("Last seen")
+        for edge in sorted(edges, key=lambda e: e.strength, reverse=True):
+            neighbor_id = (
+                edge.target_id if edge.source_id == node_id else edge.source_id
+            )
+            neighbor = g.get_node(neighbor_id)
+            neighbor_text = neighbor.text[:60] if neighbor else "[deleted]"
+            edge_table.add_row(
+                f"{neighbor_id[:8]}…",
+                neighbor_text,
+                f"{edge.strength:.0f}",
+                _fmt_ts(edge.last_seen),
+            )
+        console.print(edge_table)
 
 
 @app.command()
