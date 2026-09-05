@@ -631,6 +631,9 @@ def nlp_channel(prose_turns: list[str], project: str) -> list[CandidateNode]:
     Uses spaCy en_core_web_sm with rule-based detection. Drops retracted
     statements and candidates below the durability threshold.
 
+    Processes all turns through nlp.pipe() in one batch rather than calling
+    nlp() per turn — spaCy can share tokenizer and model state across docs.
+
     Args:
         prose_turns: Text content of Claude's assistant_message turns.
         project: Absolute path to the project root.
@@ -643,9 +646,16 @@ def nlp_channel(prose_turns: list[str], project: str) -> list[CandidateNode]:
         logger.warning("spaCy unavailable; NLP channel returning empty results")
         return []
 
+    non_retracted = [t for t in prose_turns if not _is_retracted(t)]
+    if not non_retracted:
+        return []
+
     candidates: list[CandidateNode] = []
-    for turn_text in prose_turns:
-        candidates.extend(_process_turn(nlp, turn_text, project))
+    for doc in nlp.pipe(non_retracted, batch_size=16):
+        for sent in doc.sents:
+            candidate = _process_sentence(sent, project)
+            if candidate is not None:
+                candidates.append(candidate)
     return candidates
 
 
@@ -685,7 +695,7 @@ def run_extraction(
         session_start: Unix timestamp of session start (for git channel).
 
     Returns:
-        Merged list of CandidateNode objects, deduplicated by text.
+        Merged list of CandidateNode objects filtered by durability threshold.
     """
     files = touched_files if touched_files is not None else _infer_touched_files(events)
     prose_turns = list(_parse_prose_turns(events))
