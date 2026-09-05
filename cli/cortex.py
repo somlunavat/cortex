@@ -1,17 +1,20 @@
 """Cortex CLI entry point.
 
 Commands:
-    status    — node counts by tier, token savings, last session
-    graph     — ASCII adjacency summary
-    inspect   — full metadata for a single node
-    prune     — manually evict a node by id
-    reset     — wipe all nodes for a project
-    search    — BM25 text search across memory nodes
-    list      — paginated table of all memory nodes with filters
-    decay     — run decay/eviction/promotion manually
-    install   — write plugin.json to Claude Code plugins directory
-    dashboard — start the dashboard server on port 7000
-    doctor    — verify that all Cortex dependencies are healthy
+    status     — node counts by tier, token savings, last session
+    graph      — ASCII adjacency summary
+    inspect    — full metadata for a single node
+    prune      — manually evict a node by id
+    reset      — wipe all nodes for a project
+    search     — BM25 text search across memory nodes
+    list       — paginated table of all memory nodes with filters
+    decay      — run decay/eviction/promotion manually
+    link       — create or reinforce an edge between two nodes
+    unlink     — delete an edge between two nodes
+    neighbors  — show all nodes connected to a given node
+    install    — write plugin.json to Claude Code plugins directory
+    dashboard  — start the dashboard server on port 7000
+    doctor     — verify that all Cortex dependencies are healthy
 """
 
 from __future__ import annotations
@@ -215,9 +218,14 @@ def recent(
 
 
 @app.command()
-def graph() -> None:
+def graph(
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max nodes to display"),
+) -> None:
     """Print an ASCII adjacency summary of the knowledge graph."""
-    g, project = _require_graph("")
+    g, project = _require_graph(project_path)
     nodes = g.get_all_nodes(project=project)
 
     if not nodes:
@@ -225,25 +233,28 @@ def graph() -> None:
         raise typer.Exit(0)
 
     node_map = {n.id: n for n in nodes}
+    display_nodes = nodes[:limit]
 
-    for node in nodes[:20]:
-        edges = g.get_edges(node.id)
+    # Single batch query instead of one get_edges() call per node
+    edge_map = g.get_edges_for_nodes([n.id for n in display_nodes])
+
+    for node in display_nodes:
         neighbors = []
-        for edge in edges:
+        for edge in edge_map.get(node.id, []):
             neighbor_id = (
                 edge.target_id if edge.source_id == node.id else edge.source_id
             )
             neighbor = node_map.get(neighbor_id)
             if neighbor:
-                neighbors.append(neighbor.text[:30])
+                neighbors.append(f"{neighbor.text[:28]} ({edge.strength:.0f})")
 
         tier_marker = f"T{node.tier}"
         label = node.text[:50]
         neighbor_str = " → " + ", ".join(neighbors[:3]) if neighbors else ""
         console.print(f"[{tier_marker}] {label}{neighbor_str}")
 
-    if len(nodes) > 20:
-        console.print(f"  ... and {len(nodes) - 20} more nodes")
+    if len(nodes) > limit:
+        console.print(f"  ... and {len(nodes) - limit} more nodes")
 
 
 @app.command()
@@ -296,6 +307,27 @@ def inspect(
     table.add_row("last_accessed", _fmt_ts(target.last_accessed))
     table.add_row("created_at", _fmt_ts(target.created_at))
     console.print(table)
+
+    edges = g.get_edges(node_id)
+    if edges:
+        edge_table = Table(title="Connected nodes")
+        edge_table.add_column("Neighbor ID", style="dim")
+        edge_table.add_column("Text")
+        edge_table.add_column("Strength", justify="right")
+        edge_table.add_column("Last seen")
+        for edge in sorted(edges, key=lambda e: e.strength, reverse=True):
+            neighbor_id = (
+                edge.target_id if edge.source_id == node_id else edge.source_id
+            )
+            neighbor = g.get_node(neighbor_id)
+            neighbor_text = neighbor.text[:60] if neighbor else "[deleted]"
+            edge_table.add_row(
+                f"{neighbor_id[:8]}…",
+                neighbor_text,
+                f"{edge.strength:.0f}",
+                _fmt_ts(edge.last_seen),
+            )
+        console.print(edge_table)
 
 
 @app.command()
@@ -1228,6 +1260,134 @@ def touch(
     console.print(
         f"[green]Touched[/green] {node_id[:8]}…  (weight +{TOUCH_WEIGHT_BUMP})"
     )
+
+
+@app.command()
+def link(
+    node_a: str = typer.Argument(..., help="UUID of the first node"),
+    node_b: str = typer.Argument(..., help="UUID of the second node"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+) -> None:
+    """Create or reinforce an edge between two nodes.
+
+    If the edge already exists its strength is incremented by 1. Prints the
+    new edge strength after the operation.
+    """
+    _require_uuid(node_a)
+    _require_uuid(node_b)
+    if node_a == node_b:
+        console.print("[red]Cannot link a node to itself.[/red]")
+        raise typer.Exit(1)
+
+    g, _ = _require_graph(project_path, exit_code=1)
+
+    for nid in (node_a, node_b):
+        if g.get_node(nid) is None:
+            console.print(f"[red]Node not found:[/red] {nid}")
+            raise typer.Exit(1)
+
+    g.write_edge(node_a, node_b)
+    edge = g.get_edge(node_a, node_b)
+    strength = edge.strength if edge else 1.0
+    console.print(
+        f"[green]Linked[/green] {node_a[:8]}… ↔ {node_b[:8]}…  "
+        f"(strength: {strength:.0f})"
+    )
+
+
+@app.command()
+def unlink(
+    node_a: str = typer.Argument(..., help="UUID of the first node"),
+    node_b: str = typer.Argument(..., help="UUID of the second node"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+) -> None:
+    """Delete the edge between two nodes.
+
+    Exits with code 1 if no edge exists between the given nodes.
+    """
+    _require_uuid(node_a)
+    _require_uuid(node_b)
+    g, _ = _require_graph(project_path, exit_code=1)
+
+    deleted = g.delete_edge(node_a, node_b)
+    if not deleted:
+        console.print(
+            f"[yellow]No edge found between[/yellow] {node_a[:8]}… and {node_b[:8]}…"
+        )
+        raise typer.Exit(1)
+
+    console.print(f"[green]Unlinked[/green] {node_a[:8]}… ↔ {node_b[:8]}…")
+
+
+@app.command()
+def neighbors(
+    node_id: str = typer.Argument(..., help="Node UUID to inspect"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show all nodes connected to a given node, ranked by edge strength."""
+    _require_uuid(node_id)
+    g, _ = _require_graph(project_path)
+
+    node = g.get_node(node_id)
+    if node is None:
+        console.print(f"[red]Node not found:[/red] {node_id}")
+        raise typer.Exit(1)
+
+    edges = g.get_edges(node_id)
+    if not edges:
+        if output_json:
+            print("[]")
+        else:
+            console.print("[dim]No edges.[/dim]")
+        return
+
+    edges_sorted = sorted(edges, key=lambda e: e.strength, reverse=True)
+
+    if output_json:
+        records = []
+        for edge in edges_sorted:
+            neighbor_id = (
+                edge.target_id if edge.source_id == node_id else edge.source_id
+            )
+            neighbor = g.get_node(neighbor_id)
+            records.append(
+                {
+                    "id": neighbor_id,
+                    "text": neighbor.text if neighbor else None,
+                    "tier": neighbor.tier if neighbor else None,
+                    "strength": edge.strength,
+                    "last_seen": edge.last_seen,
+                }
+            )
+        print(json.dumps(records, indent=2))
+        return
+
+    table = Table(title=f"Neighbors of {node_id[:8]}… — {node.text[:50]}")
+    table.add_column("ID", style="dim", width=10)
+    table.add_column("T", justify="center", width=3)
+    table.add_column("Strength", justify="right", width=9)
+    table.add_column("Last seen")
+    table.add_column("Text")
+
+    for edge in edges_sorted:
+        neighbor_id = edge.target_id if edge.source_id == node_id else edge.source_id
+        neighbor = g.get_node(neighbor_id)
+        table.add_row(
+            f"{neighbor_id[:8]}…",
+            str(neighbor.tier) if neighbor else "?",
+            f"{edge.strength:.0f}",
+            _fmt_ts(edge.last_seen),
+            (neighbor.text[:60] if neighbor else "[deleted]"),
+        )
+
+    console.print(table)
 
 
 @app.command()
