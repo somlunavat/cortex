@@ -1476,3 +1476,29 @@ class TestHooks20260905A:
     def test_make_node_tier_preserved(self) -> None:
         node = _make_node("text", tier=2)
         assert node.tier == 2
+
+
+class TestHooks20260905B:
+    def test_make_node_returns_node(self) -> None:
+        node = _make_node("some text")
+        assert isinstance(node, Node)
+
+    def test_make_node_text_preserved(self) -> None:
+        node = _make_node("specific text content")
+        assert node.text == "specific text content"
+
+    def test_make_node_default_tier_is_one(self) -> None:
+        node = _make_node("t")
+        assert node.tier == 1
+
+    def test_make_node_project_preserved(self) -> None:
+        node = _make_node("t", project="/custom/proj")
+        assert node.project == "/custom/proj"
+
+    def test_make_node_weight_is_one(self) -> None:
+        node = _make_node("t")
+        assert node.weight == pytest.approx(1.0)
+
+    def test_make_node_type_is_observation(self) -> None:
+        node = _make_node("t")
+        assert node.type == "observation"
