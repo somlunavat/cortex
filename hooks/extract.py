@@ -32,6 +32,9 @@ def _write_candidates(
 ) -> tuple[int, dict[str, str]]:
     """Write or merge each candidate into the graph.
 
+    Uses find_similar_batch() to resolve deduplication matches with one SQL
+    query instead of one per candidate.
+
     Returns:
         (nodes_written, file_node_ids) where file_node_ids maps relative
         file path tokens to their node UUIDs (used for edge wiring).
@@ -39,8 +42,11 @@ def _write_candidates(
     nodes_written = 0
     file_node_ids: dict[str, str] = {}
 
-    for candidate, embedding in zip(candidates, embeddings, strict=True):
-        similar = graph.find_similar(embedding, project, threshold=0.9, limit=1)
+    matches = graph.find_similar_batch(list(embeddings), project, threshold=0.9)
+
+    for candidate, embedding, match in zip(
+        candidates, embeddings, matches, strict=True
+    ):
         node = Node(
             id="",
             type=candidate.type.value,
@@ -57,8 +63,8 @@ def _write_candidates(
             created_at=now,
             session_count=1,
         )
-        if similar:
-            node_id = similar[0].id
+        if match:
+            node_id = match.id
             graph.merge_node(node_id, node)
         else:
             node_id = graph.write_node(node)

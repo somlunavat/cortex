@@ -299,6 +299,56 @@ class Graph:
         scored.sort(key=lambda x: x[0], reverse=True)
         return [node for _, node in scored[:limit]]
 
+    def find_similar_batch(
+        self,
+        embeddings: list[np.ndarray],
+        project: str,
+        threshold: float,
+    ) -> list[Node | None]:
+        """Find the best-matching existing node for each query embedding.
+
+        Loads all project nodes once, then for each query embedding returns
+        the single existing node with the highest cosine similarity above
+        threshold, or None when no match reaches the threshold.
+
+        This is equivalent to calling find_similar(..., limit=1) for every
+        embedding but uses only one SQL query instead of len(embeddings) queries.
+
+        Args:
+            embeddings: List of query vectors (float32, 384-dim).
+            project: Absolute project path to filter candidates.
+            threshold: Minimum cosine similarity to count as a match.
+
+        Returns:
+            List of the same length as embeddings. Each entry is the best-
+            matching Node or None.
+        """
+        if not embeddings:
+            return []
+        if not (0.0 <= threshold <= 1.0):
+            raise ValueError(f"threshold must be in [0.0, 1.0], got {threshold}")
+
+        rows = self._conn.execute(
+            f"SELECT {_NODE_COLUMNS} FROM nodes WHERE project = ? AND embedding IS NOT NULL",  # nosec B608
+            (project,),
+        ).fetchall()
+
+        existing = [_row_to_node(row) for row in rows]
+        if not existing:
+            return [None] * len(embeddings)
+
+        existing_embs = [n.embedding for n in existing]  # type: ignore[misc]
+
+        results: list[Node | None] = []
+        for query_emb in embeddings:
+            sims = cosine_similarity_batch(query_emb, existing_embs)  # type: ignore[arg-type]
+            best_sim = max(sims)
+            if best_sim >= threshold:
+                results.append(existing[sims.index(best_sim)])
+            else:
+                results.append(None)
+        return results
+
     def get_node(self, node_id: str) -> Node | None:
         """Return a single node by UUID, or None if not found.
 
