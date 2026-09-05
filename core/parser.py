@@ -179,29 +179,44 @@ def detect_co_occurring_writes(events: list[ParsedEvent]) -> tuple[frozenset[str
 
     Only includes pairs where both paths are different files.
 
+    Uses a two-pointer sliding window over the sorted write list so the
+    inner loop never visits events outside the time window. Complexity is
+    O(n log n) for the sort plus O(n * w) where w is the average window
+    width — much better than the O(n²) naive approach for large sessions.
+
     Args:
         events: All parsed events from one session.
 
     Returns:
         Tuple of frozensets, each containing two co-occurring file paths.
     """
-    writes = [
-        (e.timestamp, e.data.get("path", ""))
-        for e in events
-        if e.type == EventType.FILE_WRITE and e.data.get("path")
-    ]
+    writes = sorted(
+        (
+            (e.timestamp, e.data.get("path", ""))
+            for e in events
+            if e.type == EventType.FILE_WRITE and e.data.get("path")
+        ),
+        key=lambda x: x[0],
+    )
 
     pairs: list[frozenset[str]] = []
     seen: set[frozenset[str]] = set()
-    for i, (ts_a, path_a) in enumerate(writes):
-        for ts_b, path_b in writes[i + 1 :]:
-            if path_a == path_b:
+    left = 0
+
+    for right, (ts_right, path_right) in enumerate(writes):
+        # Advance left pointer to keep window within CO_OCCURRENCE_WINDOW_SECONDS
+        while writes[left][0] < ts_right - CO_OCCURRENCE_WINDOW_SECONDS:
+            left += 1
+
+        for i in range(left, right):
+            path_left = writes[i][1]
+            if path_left == path_right:
                 continue
-            if abs(ts_b - ts_a) <= CO_OCCURRENCE_WINDOW_SECONDS:
-                pair: frozenset[str] = frozenset({path_a, path_b})
-                if pair not in seen:
-                    pairs.append(pair)
-                    seen.add(pair)
+            pair: frozenset[str] = frozenset({path_left, path_right})
+            if pair not in seen:
+                pairs.append(pair)
+                seen.add(pair)
+
     return tuple(pairs)
 
 
