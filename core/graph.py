@@ -551,6 +551,36 @@ class Graph:
         )
         self._conn.commit()
 
+    def write_edges_bulk(self, pairs: list[tuple[str, str]]) -> int:
+        """Insert or increment multiple edges in a single transaction.
+
+        Equivalent to calling write_edge() for each pair but uses one
+        executemany() + commit. Skips self-loops silently.
+
+        Args:
+            pairs: List of (source_id, target_id) tuples. Empty list is a
+                safe no-op.
+
+        Returns:
+            Number of pairs that were actually attempted (self-loops excluded).
+        """
+        valid = [(a, b) for a, b in pairs if a != b]
+        if not valid:
+            return 0
+        now = int(time.time())
+        self._conn.executemany(
+            """
+            INSERT INTO edges (source_id, target_id, strength, last_seen)
+            VALUES (?, ?, 1.0, ?)
+            ON CONFLICT (source_id, target_id) DO UPDATE SET
+                strength = strength + 1.0,
+                last_seen = excluded.last_seen
+            """,
+            [(a, b, now) for a, b in valid],
+        )
+        self._conn.commit()
+        return len(valid)
+
     def get_edges(self, node_id: str) -> list[Edge]:
         """Return all edges where node_id is source or target.
 
