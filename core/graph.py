@@ -181,6 +181,62 @@ class Graph:
         self._conn.commit()
         return node_id
 
+    def write_nodes_bulk(self, nodes: list[Node]) -> list[str]:
+        """Insert multiple new nodes in a single transaction.
+
+        Like write_node(), assigns a fresh UUID4 to each node and ignores
+        any id already set on the dataclass. All rows are inserted with one
+        executemany() call followed by a single commit, which is much faster
+        than calling write_node() in a loop when inserting many nodes.
+
+        Args:
+            nodes: Node objects to insert. Empty list is a safe no-op.
+
+        Returns:
+            List of string UUID4s in the same order as the input nodes.
+        """
+        if not nodes:
+            return []
+
+        now = int(time.time())
+        ids = [str(uuid.uuid4()) for _ in nodes]
+        rows = []
+        for node_id, node in zip(ids, nodes, strict=True):
+            blob: bytes | None = None
+            if node.embedding is not None:
+                blob = serialize(node.embedding, node.precision_bits)
+            rows.append(
+                (
+                    node_id,
+                    node.type,
+                    node.tier,
+                    node.text,
+                    node.rationale,
+                    blob,
+                    node.precision_bits,
+                    node.weight,
+                    node.project,
+                    node.scope,
+                    node.source,
+                    now,
+                    node.created_at or now,
+                    node.session_count,
+                )
+            )
+
+        self._conn.executemany(
+            """
+            INSERT INTO nodes (
+                id, type, tier, text, rationale, embedding, precision_bits,
+                weight, project, scope, source, last_accessed, created_at,
+                session_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        self._conn.commit()
+        return ids
+
     def merge_node(self, existing_id: str, candidate: Node) -> None:
         """Update an existing node without creating a duplicate.
 

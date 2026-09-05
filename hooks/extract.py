@@ -33,19 +33,24 @@ def _write_candidates(
     """Write or merge each candidate into the graph.
 
     Uses find_similar_batch() to resolve deduplication matches with one SQL
-    query instead of one per candidate.
+    query. New (unmatched) nodes are inserted with write_nodes_bulk() in a
+    single transaction, reducing per-node round-trips to a single commit.
 
     Returns:
         (nodes_written, file_node_ids) where file_node_ids maps relative
         file path tokens to their node UUIDs (used for edge wiring).
     """
-    nodes_written = 0
     file_node_ids: dict[str, str] = {}
 
     matches = graph.find_similar_batch(list(embeddings), project, threshold=0.9)
 
-    for candidate, embedding, match in zip(
-        candidates, embeddings, matches, strict=True
+    # Resolve node IDs: merge matches one at a time; collect new nodes for bulk insert
+    resolved_ids: list[str] = []  # parallel to candidates; filled in two passes
+    to_insert_idx: list[int] = []  # indices into candidates that need a new write
+    to_insert_nodes: list[Node] = []
+
+    for i, (candidate, embedding, match) in enumerate(
+        zip(candidates, embeddings, matches, strict=True)
     ):
         node = Node(
             id="",
@@ -64,20 +69,26 @@ def _write_candidates(
             session_count=1,
         )
         if match:
-            node_id = match.id
-            graph.merge_node(node_id, node)
+            graph.merge_node(match.id, node)
+            resolved_ids.append(match.id)
         else:
-            node_id = graph.write_node(node)
-            nodes_written += 1
+            resolved_ids.append("")  # placeholder; filled after bulk insert
+            to_insert_idx.append(i)
+            to_insert_nodes.append(node)
 
-        # Track file-observation nodes for co-occurrence edge wiring
+    # Bulk-insert all new nodes in one transaction
+    new_ids = graph.write_nodes_bulk(to_insert_nodes)
+    for idx, node_id in zip(to_insert_idx, new_ids, strict=True):
+        resolved_ids[idx] = node_id
+
+    # Build file_node_ids map for co-occurrence edge wiring
+    for candidate, node_id in zip(candidates, resolved_ids, strict=True):
         if candidate.source.value == "jsonl" and candidate.type.value == "observation":
-            # Text is "{rel_path} was modified N times…" — extract the leading path token
             first_word = candidate.text.split(" ")[0]
             if first_word:
                 file_node_ids[first_word] = node_id
 
-    return nodes_written, file_node_ids
+    return len(to_insert_nodes), file_node_ids
 
 
 def _wire_co_occurring_edges(
