@@ -500,6 +500,98 @@ def similar(
 
 
 @app.command()
+def explain(
+    query: str = typer.Argument(..., help="Query string to run retrieval for"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+    output_json: bool = typer.Option(False, "--json", help="Output full trace as JSON"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max candidate rows to show"),
+) -> None:
+    """Show per-channel retrieval scores for every candidate node.
+
+    Runs the full BM25 + vector + graph-hop retrieval pipeline and prints a
+    table showing why each node was included or excluded. Useful for debugging
+    memory quality: low vector scores mean the embedding is a poor match; low
+    BM25 means no keyword overlap; zero graph score means the node has no
+    edges to top-scoring seed nodes.
+    """
+    from core.retrieval import retrieve_with_trace
+
+    g, project = _require_graph(project_path)
+    trace = retrieve_with_trace(query, project, g)
+
+    if output_json:
+        record = {
+            "query": trace.query,
+            "project": trace.project,
+            "tokens_used": trace.tokens_used,
+            "budget_tokens": trace.budget_tokens,
+            "tier3_count": len(trace.tier3_nodes),
+            "candidates": [
+                {
+                    "id": t.node.id,
+                    "tier": t.node.tier,
+                    "text": t.node.text[:80],
+                    "vector": round(t.vector_score, 4),
+                    "bm25": round(t.bm25_score, 4),
+                    "graph": round(t.graph_score, 4),
+                    "fused": round(t.fused_score, 4),
+                    "included": t.included,
+                    "reason": t.reason,
+                }
+                for t in trace.candidates
+            ],
+        }
+        print(json.dumps(record, indent=2))
+        return
+
+    if trace.tier3_nodes:
+        t3_table = Table(title="Tier-3 (always included)")
+        t3_table.add_column("ID", style="dim", width=10)
+        t3_table.add_column("Text")
+        for n in trace.tier3_nodes:
+            t3_table.add_row(f"{n.id[:8]}…", n.text[:70])
+        console.print(t3_table)
+
+    if not trace.candidates:
+        console.print("[dim]No tier-1/2 candidates.[/dim]")
+        return
+
+    score_table = Table(
+        title=f'Retrieval trace — "{query[:50]}"',
+        show_lines=False,
+    )
+    score_table.add_column("T", justify="center", width=3)
+    score_table.add_column("Vec", justify="right", width=6)
+    score_table.add_column("BM25", justify="right", width=6)
+    score_table.add_column("Graph", justify="right", width=6)
+    score_table.add_column("Fused", justify="right", width=6)
+    score_table.add_column("Status", width=10)
+    score_table.add_column("Text")
+
+    for t in trace.candidates[:limit]:
+        style = "green" if t.included else "dim"
+        status = "[green]✓[/green]" if t.included else "✗"
+        score_table.add_row(
+            str(t.node.tier),
+            f"{t.vector_score:.3f}",
+            f"{t.bm25_score:.3f}",
+            f"{t.graph_score:.3f}",
+            f"{t.fused_score:.3f}",
+            status,
+            t.node.text[:60],
+            style=style,
+        )
+
+    console.print(score_table)
+    console.print(
+        f"\nResult: {len(trace.result_nodes)} nodes  "
+        f"({trace.tokens_used} tokens / {trace.budget_tokens} budget)"
+    )
+
+
+@app.command()
 def decay(
     project_path: str = typer.Option(
         "", "--project", help="Project path (defaults to CWD)"
