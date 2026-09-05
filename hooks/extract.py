@@ -97,7 +97,12 @@ def _wire_co_occurring_edges(
     project: str,
     graph: Graph,
 ) -> None:
-    """Create graph edges between nodes for files written in the same time window."""
+    """Create graph edges between nodes for files written in the same time window.
+
+    Collects all valid (source_id, target_id) pairs first, then writes them
+    in a single write_edges_bulk() call instead of one write_edge() per pair.
+    """
+    edge_pairs: list[tuple[str, str]] = []
     for pair in co_pairs:
         paths = list(pair)
         if len(paths) != 2:
@@ -110,8 +115,11 @@ def _wire_co_occurring_edges(
         id_a = file_node_ids.get(rel_a)
         id_b = file_node_ids.get(rel_b)
         if id_a and id_b and id_a != id_b:
-            with contextlib.suppress(ValueError, sqlite3.IntegrityError):
-                graph.write_edge(id_a, id_b)
+            edge_pairs.append((id_a, id_b))
+
+    if edge_pairs:
+        with contextlib.suppress(sqlite3.IntegrityError):
+            graph.write_edges_bulk(edge_pairs)
 
 
 def run_extract(transcript_path: Path, project: str, graph: Graph) -> int:
