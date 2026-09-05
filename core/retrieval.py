@@ -47,6 +47,35 @@ class ScoredNode:
     score: float
 
 
+@dataclass
+class NodeTrace:
+    """Per-channel score breakdown for a single node during retrieval."""
+
+    node: Node
+    vector_score: float
+    bm25_score: float
+    graph_score: float
+    fused_score: float
+    included: bool
+    reason: str
+
+
+@dataclass
+class RetrievalTrace:
+    """Full score breakdown from a retrieve_with_trace() call.
+
+    Useful for debugging why certain nodes were or were not injected.
+    """
+
+    query: str
+    project: str
+    tier3_nodes: list[Node]
+    candidates: list[NodeTrace]
+    result_nodes: list[Node]
+    tokens_used: int
+    budget_tokens: int
+
+
 def build_bm25_index(nodes: list[Node]) -> BM25Okapi:
     """Build a BM25Okapi index from node texts.
 
@@ -370,3 +399,104 @@ def format_injection_block(
         f"\n=== END CORTEX MEMORY (tokens: {token_count} / budget: {budget_tokens}) ==="
     )
     return body + footer
+
+
+def retrieve_with_trace(
+    query: str,
+    project: str,
+    graph: Graph,
+    budget_tokens: int = TOKEN_BUDGET,
+) -> RetrievalTrace:
+    """Retrieve nodes and return a full per-channel score trace for debugging.
+
+    Runs the same algorithm as retrieve() but captures every intermediate
+    score so callers can see exactly why each node was included or excluded.
+
+    Args:
+        query: Natural-language description of the current task.
+        project: Absolute project path to scope the retrieval.
+        graph: Graph instance to query.
+        budget_tokens: Token ceiling for the injected context block.
+
+    Returns:
+        RetrievalTrace with per-node score breakdowns and the final result.
+    """
+    all_nodes = graph.get_all_nodes(project=project)
+
+    tier3 = [n for n in all_nodes if n.tier == 3]
+    raw_candidates = [n for n in all_nodes if n.tier < 3]
+
+    if not raw_candidates:
+        result = list(tier3)
+        used = count_tokens(" ".join(n.text for n in result))
+        return RetrievalTrace(
+            query=query,
+            project=project,
+            tier3_nodes=tier3,
+            candidates=[],
+            result_nodes=result,
+            tokens_used=used,
+            budget_tokens=budget_tokens,
+        )
+
+    query_embedding = embed(query)
+    bm25_index = build_bm25_index(raw_candidates)
+
+    v_scores = vector_channel(query_embedding, raw_candidates)
+    b_scores = bm25_channel(query, raw_candidates, bm25_index)
+
+    top3_seeds = [
+        sn.node for sn in sorted(v_scores, key=lambda s: s.score, reverse=True)[:3]
+    ]
+    g_scores = graph_channel(top3_seeds, graph, raw_candidates)
+
+    fused = fuse_scores(v_scores, b_scores, g_scores)
+    top_k = fused[:TOP_K]
+    result_nodes = _enforce_budget(tier3, top_k, budget_tokens)
+    result_ids = {n.id for n in result_nodes}
+
+    v_map = {sn.node.id: sn.score for sn in v_scores}
+    b_map = {sn.node.id: sn.score for sn in b_scores}
+    g_map = {sn.node.id: sn.score for sn in g_scores}
+    f_map = {sn.node.id: sn.score for sn in fused}
+
+    top_k_ids = {sn.node.id for sn in top_k}
+
+    traces: list[NodeTrace] = []
+    for node in raw_candidates:
+        fused_score = f_map.get(node.id, 0.0)
+        in_top_k = node.id in top_k_ids
+        included = node.id in result_ids
+
+        if included:
+            reason = "included"
+        elif not in_top_k:
+            reason = f"below top-{TOP_K} (fused={fused_score:.3f})"
+        else:
+            reason = "budget exceeded"
+
+        traces.append(
+            NodeTrace(
+                node=node,
+                vector_score=v_map.get(node.id, 0.0),
+                bm25_score=b_map.get(node.id, 0.0),
+                graph_score=g_map.get(node.id, 0.0),
+                fused_score=fused_score,
+                included=included,
+                reason=reason,
+            )
+        )
+
+    traces.sort(key=lambda t: t.fused_score, reverse=True)
+
+    used_tokens = count_tokens(" ".join(n.text for n in result_nodes))
+
+    return RetrievalTrace(
+        query=query,
+        project=project,
+        tier3_nodes=tier3,
+        candidates=traces,
+        result_nodes=result_nodes,
+        tokens_used=used_tokens,
+        budget_tokens=budget_tokens,
+    )
