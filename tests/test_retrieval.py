@@ -1416,3 +1416,24 @@ class TestRetrieval20260901B:
     def test_fuse_scores_all_empty(self) -> None:
         result = fuse_scores([], [], [])
         assert isinstance(result, list)
+
+
+class TestRetrieval20260905A:
+    def test_token_budget_positive(self) -> None:
+        assert TOKEN_BUDGET > 0
+
+    def test_bm25_weight_positive(self) -> None:
+        assert BM25_WEIGHT > 0.0
+
+    def test_vector_weight_positive(self) -> None:
+        assert VECTOR_WEIGHT > 0.0
+
+    def test_graph_weight_positive(self) -> None:
+        assert GRAPH_WEIGHT > 0.0
+
+    def test_weights_sum_to_one(self) -> None:
+        total = BM25_WEIGHT + VECTOR_WEIGHT + GRAPH_WEIGHT
+        assert abs(total - 1.0) < 1e-6
+
+    def test_top_k_positive(self) -> None:
+        assert TOP_K > 0
