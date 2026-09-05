@@ -1463,3 +1463,26 @@ class TestRetrieval20260905B:
     def test_fuse_scores_all_empty(self) -> None:
         result = fuse_scores([], [], [])
         assert isinstance(result, list)
+
+
+class TestRetrieval20260905C:
+    def test_build_bm25_index_one_node(self) -> None:
+        node = _make_node("hello world")
+        index = build_bm25_index([node])
+        assert index is not None
+
+    def test_bm25_weight_lt_one(self) -> None:
+        assert BM25_WEIGHT < 1.0
+
+    def test_vector_weight_lt_one(self) -> None:
+        assert VECTOR_WEIGHT < 1.0
+
+    def test_graph_weight_lt_one(self) -> None:
+        assert GRAPH_WEIGHT < 1.0
+
+    def test_format_injection_block_is_str(self) -> None:
+        block = format_injection_block([], TEST_PROJECT)
+        assert isinstance(block, str)
+
+    def test_top_k_at_least_one(self) -> None:
+        assert TOP_K >= 1
