@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from core.embedder import cosine_similarity, deserialize, serialize
+from core.embedder import cosine_similarity_batch, deserialize, serialize
 
 TOUCH_WEIGHT_BUMP: float = 0.1
 MERGE_WEIGHT_BUMP: float = 0.5
@@ -284,13 +284,18 @@ class Graph:
             (project,),
         ).fetchall()
 
-        scored: list[tuple[float, Node]] = []
-        for row in rows:
-            node = _row_to_node(row)
-            sim = cosine_similarity(embedding, node.embedding)  # type: ignore[arg-type]
-            if sim >= threshold:
-                scored.append((sim, node))
+        nodes = [_row_to_node(row) for row in rows]
+        if not nodes:
+            return []
 
+        embeddings = [n.embedding for n in nodes]  # type: ignore[misc]
+        sims = cosine_similarity_batch(embedding, embeddings)  # type: ignore[arg-type]
+
+        scored = [
+            (sim, node)
+            for sim, node in zip(sims, nodes, strict=True)
+            if sim >= threshold
+        ]
         scored.sort(key=lambda x: x[0], reverse=True)
         return [node for _, node in scored[:limit]]
 
