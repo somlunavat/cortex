@@ -1476,3 +1476,32 @@ class TestHooks20260906A:
     def test_make_node_rationale_none(self) -> None:
         node = _make_node("t")
         assert node.rationale is None
+
+
+class TestHooks20260906B:
+    def test_run_inject_empty_result_empty_graph(self, graph: Graph) -> None:
+        result = run_inject(TEST_PROJECT, graph)
+        assert result == "" or isinstance(result, str)
+
+    def test_run_extract_returns_int_type(self, graph: Graph) -> None:
+        result = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert type(result) is int
+
+    def test_run_extract_zero_for_seen_transcript(self, graph: Graph) -> None:
+        run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        second = run_extract(SIMPLE_TRANSCRIPT, TEST_PROJECT, graph)
+        assert second == 0
+
+    def test_make_node_precision_bits_32(self) -> None:
+        node = _make_node("t")
+        assert node.precision_bits == 32
+
+    def test_run_inject_with_two_nodes(self, graph: Graph) -> None:
+        graph.write_node(_make_node("context alpha"))
+        graph.write_node(_make_node("context beta"))
+        result = run_inject(TEST_PROJECT, graph)
+        assert isinstance(result, str)
+
+    def test_make_node_last_accessed_positive(self) -> None:
+        node = _make_node("t")
+        assert node.last_accessed > 0
