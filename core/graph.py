@@ -80,16 +80,22 @@ def _node_filter(
     project: str,
     *,
     tier: int | None = None,
+    tiers: list[int] | None = None,
     source: str | None = None,
 ) -> tuple[str, list[str | int]]:
     """Build a WHERE clause and params list for node queries.
 
-    Always includes project = ?. Appends tier and/or source filters when
-    provided. Returns (where_clause, params) ready for cursor.execute.
+    Always includes project = ?. Appends tier, tiers (IN list), and/or
+    source filters when provided. tiers takes precedence over tier when
+    both are given. Returns (where_clause, params) ready for cursor.execute.
     """
     clauses = ["project = ?"]
     params: list[str | int] = [project]
-    if tier is not None:
+    if tiers is not None:
+        placeholders = ",".join("?" * len(tiers))
+        clauses.append(f"tier IN ({placeholders})")
+        params.extend(tiers)
+    elif tier is not None:
         clauses.append("tier = ?")
         params.append(tier)
     if source is not None:
@@ -451,7 +457,12 @@ class Graph:
             return None
         return _row_to_node(row)
 
-    def get_all_nodes(self, project: str, tier: int | None = None) -> list[Node]:
+    def get_all_nodes(
+        self,
+        project: str,
+        tier: int | None = None,
+        tiers: list[int] | None = None,
+    ) -> list[Node]:
         """Return all nodes for a project ordered by weight descending.
 
         Ordering by weight ensures callers (CLI, retrieval) naturally see the
@@ -460,11 +471,13 @@ class Graph:
         Args:
             project: Absolute project path.
             tier: If provided, only return nodes at this tier level.
+            tiers: If provided, only return nodes whose tier is in this list.
+                Takes precedence over tier when both are given.
 
         Returns:
             List of Node objects for the project, ordered by weight DESC.
         """
-        where, params = _node_filter(project, tier=tier)
+        where, params = _node_filter(project, tier=tier, tiers=tiers)
         return self._exec_nodes(
             f"SELECT {_NODE_COLUMNS} FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
             params,
