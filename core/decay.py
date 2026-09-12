@@ -126,7 +126,7 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
     Returns:
         DecayResult with counts of decayed, evicted, and promoted nodes.
     """
-    nodes = graph.get_all_nodes(project=project)
+    nodes = graph.get_all_nodes(project=project, tiers=[1, 2])
     now = int(time.time())
 
     weight_deltas: list[tuple[str, float]] = []
@@ -134,8 +134,6 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
     to_promote: list[tuple[Node, float]] = []
 
     for node in nodes:
-        if node.tier == 3:
-            continue
 
         delta = node.weight * _decay_rate(node.tier) - node.weight
         decayed_weight = max(0.0, node.weight + delta)
@@ -183,18 +181,11 @@ def preview_decay(graph: Graph, project: str) -> list[NodeDecayPreview]:
     Returns:
         List of NodeDecayPreview, one per non-tier-3 node.
     """
-    nodes = graph.get_all_nodes(project=project)
+    nodes = graph.get_all_nodes(project=project, tiers=[1, 2])
     now = int(time.time())
     previews: list[NodeDecayPreview] = []
 
     for node in nodes:
-        if node.tier == 3:
-            previews.append(
-                NodeDecayPreview(
-                    node=node, decayed_weight=node.weight, action="skip", new_tier=None
-                )
-            )
-            continue
 
         delta = node.weight * _decay_rate(node.tier) - node.weight
         decayed_weight = max(0.0, node.weight + delta)
