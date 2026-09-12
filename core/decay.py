@@ -115,6 +115,10 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
     - Tier-1 → Tier-2: precision_bits = 8
     - Tier-2 → Tier-3: precision_bits = 2
 
+    Weight updates and evictions are batched into single SQL transactions.
+    Promotions are applied individually because each requires an embedding
+    precision downcast (a separate UPDATE per node).
+
     Args:
         graph: Graph instance to operate on.
         project: Absolute project path — only nodes for this project are touched.
@@ -125,37 +129,41 @@ def run_decay(graph: Graph, project: str) -> DecayResult:
     nodes = graph.get_all_nodes(project=project)
     now = int(time.time())
 
-    decayed = 0
-    evicted = 0
-    promoted = 0
+    weight_deltas: list[tuple[str, float]] = []
+    evict_ids: list[str] = []
+    to_promote: list[tuple[Node, float]] = []
 
     for node in nodes:
         if node.tier == 3:
             continue
 
         delta = node.weight * _decay_rate(node.tier) - node.weight
-        graph.update_weight(node.id, delta=delta)
-        decayed += 1
-
         decayed_weight = max(0.0, node.weight + delta)
+        weight_deltas.append((node.id, delta))
 
         if decayed_weight < _eviction_threshold(node.tier):
-            graph.delete_node(node.id)
-            evicted += 1
-            continue
+            evict_ids.append(node.id)
+        elif _meets_promotion_criteria(node, decayed_weight, now):
+            to_promote.append((node, decayed_weight))
 
-        if _meets_promotion_criteria(node, decayed_weight, now):
-            new_tier, new_precision = _PROMOTION_TARGET[node.tier]
-            _promote_node(
-                graph, node, new_tier=new_tier, new_precision=new_precision, now=now
-            )
-            promoted += 1
+    # Batch all weight updates in one transaction
+    graph.update_weights_bulk(weight_deltas)
+
+    # Batch all evictions in one DELETE ... IN (...)
+    graph.delete_nodes_bulk(evict_ids)
+
+    # Promotions are rare and each needs an embedding downcast — keep individual
+    for node, _decayed_weight in to_promote:
+        new_tier, new_precision = _PROMOTION_TARGET[node.tier]
+        _promote_node(
+            graph, node, new_tier=new_tier, new_precision=new_precision, now=now
+        )
 
     return DecayResult(
         project=project,
-        nodes_decayed=decayed,
-        nodes_evicted=evicted,
-        nodes_promoted=promoted,
+        nodes_decayed=len(weight_deltas),
+        nodes_evicted=len(evict_ids),
+        nodes_promoted=len(to_promote),
     )
 
 

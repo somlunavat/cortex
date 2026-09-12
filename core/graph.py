@@ -783,6 +783,27 @@ class Graph:
         )
         self._conn.commit()
 
+    def update_weights_bulk(self, deltas: list[tuple[str, float]]) -> int:
+        """Apply weight deltas to multiple nodes in a single transaction.
+
+        Each entry is (node_id, delta). The new weight is floored at 0.0.
+        Rows with no matching id are silently skipped.
+
+        Args:
+            deltas: List of (node_id, delta) pairs to apply.
+
+        Returns:
+            Number of rows updated.
+        """
+        if not deltas:
+            return 0
+        self._conn.executemany(
+            "UPDATE nodes SET weight = MAX(0.0, weight + ?) WHERE id = ?",
+            [(delta, node_id) for node_id, delta in deltas],
+        )
+        self._conn.commit()
+        return len(deltas)
+
     def update_node_rationale(self, node_id: str, rationale: str | None) -> bool:
         """Set or clear the rationale field on a node.
 
