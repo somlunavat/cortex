@@ -9,6 +9,7 @@ Commands:
     search     — BM25 text search across memory nodes
     list       — paginated table of all memory nodes with filters
     decay      — run decay/eviction/promotion manually
+    gc         — delete dangling edges whose endpoints no longer exist
     link       — create or reinforce an edge between two nodes
     unlink     — delete an edge between two nodes
     neighbors  — show all nodes connected to a given node
@@ -1410,6 +1411,26 @@ def touch(
     console.print(
         f"[green]Touched[/green] {node_id[:8]}…  (weight +{TOUCH_WEIGHT_BUMP})"
     )
+
+
+@app.command()
+def gc(
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
+) -> None:
+    """Delete dangling edges whose source or target node no longer exists.
+
+    Edges become dangling when a node is deleted by a path that bypassed
+    SQLite's ON DELETE CASCADE (e.g. direct SQL writes or older database
+    files). Running gc repairs the edge table without touching any nodes.
+    """
+    g, _ = _require_graph(project_path)
+    removed = g.delete_dangling_edges()
+    if removed:
+        console.print(f"[yellow]Removed {removed} dangling edge(s).[/yellow]")
+    else:
+        console.print("[green]No dangling edges found.[/green]")
 
 
 @app.command()
