@@ -393,14 +393,33 @@ class Graph:
         if not existing:
             return [None] * len(embeddings)
 
-        existing_embs = [n.embedding for n in existing]  # type: ignore[misc]
+        # Build the corpus matrix once and batch all query embeddings into a
+        # single matrix multiply: (N_queries, D) @ (D, M_corpus) → (N, M).
+        # This collapses N separate cosine_similarity_batch calls into one BLAS op.
+        corpus = np.stack(
+            [
+                e if e.dtype == np.float32 else e.astype(np.float32)  # type: ignore[union-attr]
+                for e in (n.embedding for n in existing)
+            ]
+        )  # (M, D)
+        corpus_norms = np.linalg.norm(corpus, axis=1, keepdims=True)  # (M, 1)
+        corpus_norms = np.where(corpus_norms > 0.0, corpus_norms, 1.0)
+        corpus_norm = corpus / corpus_norms  # (M, D) unit vectors
+
+        q_mat = np.stack(
+            [e if e.dtype == np.float32 else e.astype(np.float32) for e in embeddings]
+        )  # (N, D)
+        q_norms = np.linalg.norm(q_mat, axis=1, keepdims=True)  # (N, 1)
+        q_norms = np.where(q_norms > 0.0, q_norms, 1.0)
+        q_norm = q_mat / q_norms  # (N, D) unit vectors
+
+        sim_matrix = q_norm @ corpus_norm.T  # (N, M)
 
         results: list[Node | None] = []
-        for query_emb in embeddings:
-            sims = cosine_similarity_batch(query_emb, existing_embs)  # type: ignore[arg-type]
-            best_sim = max(sims)
-            if best_sim >= threshold:
-                results.append(existing[sims.index(best_sim)])
+        for row in sim_matrix:
+            best_idx = int(np.argmax(row))
+            if float(row[best_idx]) >= threshold:
+                results.append(existing[best_idx])
             else:
                 results.append(None)
         return results
@@ -707,13 +726,11 @@ class Graph:
         Returns:
             Number of dangling edges deleted.
         """
-        cur = self._conn.execute(
-            """
+        cur = self._conn.execute("""
             DELETE FROM edges
             WHERE source_id NOT IN (SELECT id FROM nodes)
                OR target_id NOT IN (SELECT id FROM nodes)
-            """
-        )
+            """)
         self._conn.commit()
         return cur.rowcount
 
