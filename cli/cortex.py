@@ -383,6 +383,9 @@ def search(
         help="Filter by extraction source: jsonl, ast, git, or nlp",
     ),
     output_json: bool = typer.Option(False, "--json", help="Output results as JSON"),
+    project_path: str = typer.Option(
+        "", "--project", help="Project path (defaults to CWD)"
+    ),
 ) -> None:
     """Search memory nodes by text using BM25 ranking."""
     if len(query) > _SEARCH_QUERY_MAX_LEN:
@@ -390,7 +393,7 @@ def search(
             f"[red]Query too long:[/red] {len(query)} chars (max {_SEARCH_QUERY_MAX_LEN})"
         )
         raise typer.Exit(1)
-    g, project = _require_graph("")
+    g, project = _require_graph(project_path)
     valid_sources = {"jsonl", "ast", "git", "nlp"}
     if source and source not in valid_sources:
         console.print(
