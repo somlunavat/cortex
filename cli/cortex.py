@@ -225,7 +225,7 @@ def graph(
 ) -> None:
     """Print an ASCII adjacency summary of the knowledge graph."""
     g, project = _require_graph(project_path)
-    nodes = g.get_all_nodes(project=project)
+    nodes = g.get_all_nodes(project=project, include_embeddings=False)
 
     if not nodes:
         console.print("Graph is empty.")
@@ -353,7 +353,7 @@ def reset(
 ) -> None:
     """Wipe all nodes for a project. Irreversible."""
     g, project = _require_graph(project_path)
-    count = len(g.get_all_nodes(project=project))
+    count = len(g.get_all_nodes(project=project, include_embeddings=False))
 
     if not confirm:
         typer.confirm(
@@ -405,7 +405,9 @@ def search(
             project=project, source=source, tier=tier if tier else None
         )
     else:
-        nodes = g.get_all_nodes(project=project, tier=tier if tier else None)
+        nodes = g.get_all_nodes(
+            project=project, tier=tier if tier else None, include_embeddings=False
+        )
 
     if not nodes:
         if output_json:
@@ -713,7 +715,9 @@ def export(
         )
         raise typer.Exit(1)
     g, project = _require_graph(project_path)
-    nodes = g.get_all_nodes(project=project, tier=tier if tier else None)
+    nodes = g.get_all_nodes(
+        project=project, tier=tier if tier else None, include_embeddings=False
+    )
 
     if not nodes:
         console.print("[dim]No nodes to export.[/dim]")
@@ -976,7 +980,7 @@ def import_(
     project = str(root)
     existing_texts: set[str] = set()
     if skip_duplicates:
-        nodes = g.get_all_nodes(project=project)
+        nodes = g.get_all_nodes(project=project, include_embeddings=False)
         existing_texts = {n.text for n in nodes}
 
     import time as _time

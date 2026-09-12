@@ -24,6 +24,13 @@ _NODE_COLUMNS = (
     "weight, project, scope, source, last_accessed, created_at, session_count"
 )
 
+# Cheaper variant for display-only queries: embedding column is skipped at the
+# SQL layer so blobs are never transferred from SQLite or deserialized.
+_NODE_COLUMNS_SLIM = (
+    "id, type, tier, text, rationale, NULL AS embedding, precision_bits, "
+    "weight, project, scope, source, last_accessed, created_at, session_count"
+)
+
 
 @lru_cache(maxsize=4096)
 def _cached_deserialize(blob: bytes, precision_bits: int) -> np.ndarray:
@@ -462,6 +469,7 @@ class Graph:
         project: str,
         tier: int | None = None,
         tiers: list[int] | None = None,
+        include_embeddings: bool = True,
     ) -> list[Node]:
         """Return all nodes for a project ordered by weight descending.
 
@@ -473,13 +481,19 @@ class Graph:
             tier: If provided, only return nodes at this tier level.
             tiers: If provided, only return nodes whose tier is in this list.
                 Takes precedence over tier when both are given.
+            include_embeddings: When False, the embedding column is replaced
+                with NULL at the SQL layer so blobs are never transferred or
+                deserialized. Use for display-only queries that never need
+                vector similarity.
 
         Returns:
             List of Node objects for the project, ordered by weight DESC.
+            Node.embedding is None when include_embeddings=False.
         """
+        cols = _NODE_COLUMNS if include_embeddings else _NODE_COLUMNS_SLIM
         where, params = _node_filter(project, tier=tier, tiers=tiers)
         return self._exec_nodes(
-            f"SELECT {_NODE_COLUMNS} FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
+            f"SELECT {cols} FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
             params,
         )
 
