@@ -108,7 +108,7 @@ def status(
     """Show node counts by tier, type distribution, source breakdown, and last session."""
     g, project = _require_graph(project_path)
 
-    tier_map = g.get_tier_counts(project)
+    summary = g.get_status_summary(project)
     tier_labels = {1: "Ephemeral", 2: "Semantic", 3: "Procedural"}
 
     tier_table = Table(title=f"Cortex — {project}")
@@ -117,29 +117,27 @@ def status(
     tier_table.add_column("Nodes", justify="right")
     tier_table.add_column("Avg weight", justify="right")
     for t in (1, 2, 3):
-        cnt, avg_w = tier_map.get(t, (0, 0.0))
+        cnt, avg_w = summary.tier_counts.get(t, (0, 0.0))
         tier_table.add_row(str(t), tier_labels[t], str(cnt), f"{avg_w:.2f}")
     console.print(tier_table)
 
-    type_pairs = g.get_type_counts(project)
-    if type_pairs:
+    if summary.type_counts:
         type_table = Table(title="Node types")
         type_table.add_column("Type", style="dim")
         type_table.add_column("Count", justify="right")
-        for typ, cnt in type_pairs:
+        for typ, cnt in summary.type_counts:
             type_table.add_row(typ, str(cnt))
         console.print(type_table)
 
-    src_pairs = g.get_source_counts(project)
-    if src_pairs:
+    if summary.source_counts:
         src_table = Table(title="Extraction sources")
         src_table.add_column("Source", style="dim")
         src_table.add_column("Nodes", justify="right")
-        for src, cnt in src_pairs:
+        for src, cnt in summary.source_counts:
             src_table.add_row(src, str(cnt))
         console.print(src_table)
 
-    last = g.get_last_session(project)
+    last = summary.last_session
     if last:
         console.print(f"\nLast session: [green]{_fmt_ts(last['ended_at'])}[/green]")
         console.print(f"  Nodes written:   {last['nodes_written']}")

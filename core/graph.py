@@ -66,6 +66,16 @@ class Edge:
     last_seen: int
 
 
+@dataclass
+class StatusSummary:
+    """Snapshot of graph statistics for a single project, from one transaction."""
+
+    tier_counts: dict[int, tuple[int, float]]
+    type_counts: list[tuple[str, int]]
+    source_counts: list[tuple[str, int]]
+    last_session: dict[str, Any] | None
+
+
 def _node_filter(
     project: str,
     *,
@@ -1010,6 +1020,50 @@ class Graph:
             (project,),
         ).fetchone()
         return dict(row) if row else None
+
+    def get_status_summary(self, project: str) -> StatusSummary:
+        """Return a consistent snapshot of all status statistics for a project.
+
+        Runs all four queries inside a single deferred transaction so the
+        tier counts, type distribution, source breakdown, and last session
+        all reflect the same database state. Replaces calling get_tier_counts,
+        get_type_counts, get_source_counts, and get_last_session separately.
+
+        Args:
+            project: Absolute project path.
+        """
+        with self._conn:
+            tier_rows = self._conn.execute(
+                "SELECT tier, COUNT(*) AS cnt, AVG(weight) AS avg_w "
+                "FROM nodes WHERE project = ? GROUP BY tier",
+                (project,),
+            ).fetchall()
+            type_rows = self._conn.execute(
+                "SELECT type, COUNT(*) AS cnt FROM nodes "
+                "WHERE project = ? GROUP BY type ORDER BY cnt DESC",
+                (project,),
+            ).fetchall()
+            source_rows = self._conn.execute(
+                "SELECT source, COUNT(*) AS cnt FROM nodes "
+                "WHERE project = ? GROUP BY source ORDER BY cnt DESC",
+                (project,),
+            ).fetchall()
+            session_row = self._conn.execute(
+                "SELECT ended_at, nodes_written, nodes_evicted, nodes_promoted, "
+                "tokens_raw, tokens_injected "
+                "FROM sessions WHERE project = ? ORDER BY ended_at DESC LIMIT 1",
+                (project,),
+            ).fetchone()
+
+        return StatusSummary(
+            tier_counts={
+                int(r["tier"]): (int(r["cnt"]), float(r["avg_w"] or 0.0))
+                for r in tier_rows
+            },
+            type_counts=[(str(r["type"]), int(r["cnt"])) for r in type_rows],
+            source_counts=[(str(r["source"]), int(r["cnt"])) for r in source_rows],
+            last_session=dict(session_row) if session_row else None,
+        )
 
     def get_recent_nodes(self, project: str, limit: int = 10) -> list[Node]:
         """Return nodes ordered by last_accessed DESC.
