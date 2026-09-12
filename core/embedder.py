@@ -60,7 +60,8 @@ def embed_batch(texts: list[str]) -> list[np.ndarray]:
     try:
         from sentence_transformers import SentenceTransformer
 
-        assert isinstance(model, SentenceTransformer)
+        if not isinstance(model, SentenceTransformer):
+            return [np.zeros(_EMBEDDING_DIM, dtype=np.float32) for _ in texts]
         results = model.encode(texts, convert_to_numpy=True, batch_size=64)
         out: list[np.ndarray] = []
         for r in results:
@@ -69,7 +70,7 @@ def embed_batch(texts: list[str]) -> list[np.ndarray]:
                 arr = arr.squeeze().astype(np.float32)
             out.append(arr)
         return out
-    except (RuntimeError, ValueError, AssertionError) as exc:
+    except (RuntimeError, ValueError) as exc:
         logger.warning("Batch embedding failed: %s; using zero vectors", exc)
         return [np.zeros(_EMBEDDING_DIM, dtype=np.float32) for _ in texts]
 
@@ -77,8 +78,8 @@ def embed_batch(texts: list[str]) -> list[np.ndarray]:
 def embed(text: str) -> np.ndarray:
     """Embed a text string into a 384-dimensional float32 vector.
 
-    Loads the model on first call. Returns a zero vector if the model
-    fails to load.
+    Delegates to embed_batch() so the model is invoked through a single
+    code path. Returns a zero vector if the model fails to load.
 
     Args:
         text: Input text to embed (typically one sentence).
@@ -86,21 +87,7 @@ def embed(text: str) -> np.ndarray:
     Returns:
         numpy float32 array of shape (384,).
     """
-    model = _get_model()
-    if model is None:
-        return np.zeros(_EMBEDDING_DIM, dtype=np.float32)
-    try:
-        from sentence_transformers import SentenceTransformer
-
-        assert isinstance(model, SentenceTransformer)
-        result = model.encode(text, convert_to_numpy=True)
-        arr = np.asarray(result, dtype=np.float32)
-        if arr.ndim > 1:
-            return arr.squeeze().astype(np.float32)
-        return arr
-    except (RuntimeError, ValueError, AssertionError) as exc:
-        logger.warning("Embedding failed for text %r: %s", text[:40], exc)
-        return np.zeros(_EMBEDDING_DIM, dtype=np.float32)
+    return embed_batch([text])[0]
 
 
 def serialize(embedding: np.ndarray, precision_bits: int = 32) -> bytes:
