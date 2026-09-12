@@ -84,28 +84,37 @@ def open_graph(project_root: Path, *, create: bool = False) -> Graph | None:
 def _apply_migrations(conn: sqlite3.Connection) -> None:
     """Apply schema migrations that cannot be expressed as idempotent DDL.
 
-    Each migration is guarded by a column-existence check so this function
-    is safe to call on every database open.
+    Uses PRAGMA user_version as a migration counter so each migration runs
+    exactly once per database, not on every open. Column-existence checks
+    are kept as extra guards for databases created by older code that never
+    set user_version.
     """
-    existing_cols = {
-        row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
-    }
-    if "nodes_promoted" not in existing_cols:
-        conn.execute(
-            "ALTER TABLE sessions ADD COLUMN nodes_promoted INTEGER NOT NULL DEFAULT 0"
-        )
+    version: int = conn.execute("PRAGMA user_version").fetchone()[0]
+
+    # Migration 1: add nodes_promoted column to sessions
+    if version < 1:
+        existing_cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+        }
+        if "nodes_promoted" not in existing_cols:
+            conn.execute(
+                "ALTER TABLE sessions ADD COLUMN nodes_promoted INTEGER NOT NULL DEFAULT 0"
+            )
         conn.commit()
 
-    # Clean up dangling edges left by connections that ran without
-    # PRAGMA foreign_keys = ON (added 2026-09-05; safe to run every open).
-    # Guard with a table-existence check — migration tests use bare schemas.
-    has_edges = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='edges'"
-    ).fetchone()
-    if has_edges:
-        conn.execute("""
-            DELETE FROM edges
-            WHERE source_id NOT IN (SELECT id FROM nodes)
-               OR target_id NOT IN (SELECT id FROM nodes)
-            """)
+    # Migration 2: purge dangling edges left by connections that ran without
+    # PRAGMA foreign_keys = ON (guard on table existence for bare test schemas).
+    if version < 2:
+        has_edges = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='edges'"
+        ).fetchone()
+        if has_edges:
+            conn.execute("""
+                DELETE FROM edges
+                WHERE source_id NOT IN (SELECT id FROM nodes)
+                   OR target_id NOT IN (SELECT id FROM nodes)
+                """)
         conn.commit()
+
+    if version < 2:
+        conn.execute("PRAGMA user_version = 2")
