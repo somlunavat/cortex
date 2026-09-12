@@ -402,7 +402,10 @@ def search(
 
     if source:
         nodes = g.get_nodes_by_source(
-            project=project, source=source, tier=tier if tier else None
+            project=project,
+            source=source,
+            tier=tier if tier else None,
+            include_embeddings=False,
         )
     else:
         nodes = g.get_all_nodes(
