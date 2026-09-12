@@ -74,6 +74,8 @@ def open_graph(project_root: Path, *, create: bool = False) -> Graph | None:
 
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
+    # Enable FK enforcement so ON DELETE CASCADE on edges fires correctly.
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA_PATH.read_text())
     _apply_migrations(conn)
     return Graph(connection=conn)
@@ -92,4 +94,18 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE sessions ADD COLUMN nodes_promoted INTEGER NOT NULL DEFAULT 0"
         )
+        conn.commit()
+
+    # Clean up dangling edges left by connections that ran without
+    # PRAGMA foreign_keys = ON (added 2026-09-05; safe to run every open).
+    # Guard with a table-existence check — migration tests use bare schemas.
+    has_edges = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='edges'"
+    ).fetchone()
+    if has_edges:
+        conn.execute("""
+            DELETE FROM edges
+            WHERE source_id NOT IN (SELECT id FROM nodes)
+               OR target_id NOT IN (SELECT id FROM nodes)
+            """)
         conn.commit()
