@@ -498,7 +498,11 @@ class Graph:
         )
 
     def get_nodes_by_source(
-        self, project: str, source: str, tier: int | None = None
+        self,
+        project: str,
+        source: str,
+        tier: int | None = None,
+        include_embeddings: bool = True,
     ) -> list[Node]:
         """Return nodes filtered by extraction source channel.
 
@@ -508,13 +512,17 @@ class Graph:
             project: Absolute project path.
             source: Extraction source: 'jsonl', 'ast', 'git', or 'nlp'.
             tier: Optional tier filter; None returns all tiers.
+            include_embeddings: When False, embedding blobs are excluded from
+                the query (returned as None). Use for display or text-only
+                operations such as BM25 search.
 
         Returns:
             List of Node objects, ordered by weight DESC.
         """
+        cols = _NODE_COLUMNS if include_embeddings else _NODE_COLUMNS_SLIM
         where, params = _node_filter(project, source=source, tier=tier)
         return self._exec_nodes(
-            f"SELECT {_NODE_COLUMNS} FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
+            f"SELECT {cols} FROM nodes WHERE {where} ORDER BY weight DESC",  # nosec B608
             params,
         )
 
