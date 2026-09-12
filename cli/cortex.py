@@ -108,7 +108,7 @@ def status(
     """Show node counts by tier, type distribution, source breakdown, and last session."""
     g, project = _require_graph(project_path)
 
-    tier_map = g.get_tier_counts(project)
+    summary = g.get_status_summary(project)
     tier_labels = {1: "Ephemeral", 2: "Semantic", 3: "Procedural"}
 
     tier_table = Table(title=f"Cortex — {project}")
@@ -117,29 +117,27 @@ def status(
     tier_table.add_column("Nodes", justify="right")
     tier_table.add_column("Avg weight", justify="right")
     for t in (1, 2, 3):
-        cnt, avg_w = tier_map.get(t, (0, 0.0))
+        cnt, avg_w = summary.tier_counts.get(t, (0, 0.0))
         tier_table.add_row(str(t), tier_labels[t], str(cnt), f"{avg_w:.2f}")
     console.print(tier_table)
 
-    type_pairs = g.get_type_counts(project)
-    if type_pairs:
+    if summary.type_counts:
         type_table = Table(title="Node types")
         type_table.add_column("Type", style="dim")
         type_table.add_column("Count", justify="right")
-        for typ, cnt in type_pairs:
+        for typ, cnt in summary.type_counts:
             type_table.add_row(typ, str(cnt))
         console.print(type_table)
 
-    src_pairs = g.get_source_counts(project)
-    if src_pairs:
+    if summary.source_counts:
         src_table = Table(title="Extraction sources")
         src_table.add_column("Source", style="dim")
         src_table.add_column("Nodes", justify="right")
-        for src, cnt in src_pairs:
+        for src, cnt in summary.source_counts:
             src_table.add_row(src, str(cnt))
         console.print(src_table)
 
-    last = g.get_last_session(project)
+    last = summary.last_session
     if last:
         console.print(f"\nLast session: [green]{_fmt_ts(last['ended_at'])}[/green]")
         console.print(f"  Nodes written:   {last['nodes_written']}")
@@ -1243,6 +1241,7 @@ def list_nodes(
         "weight", "--sort", help="Sort by: weight, created, accessed"
     ),
     limit: int = typer.Option(25, "--limit", "-n", help="Maximum nodes to show"),
+    offset: int = typer.Option(0, "--offset", help="Skip this many rows (for paging)"),
     output_json: bool = typer.Option(
         False, "--json", help="Output nodes as JSON instead of a table"
     ),
@@ -1269,6 +1268,9 @@ def list_nodes(
             f"[red]Invalid sort '{sort}'. Choose from: {', '.join(sorted(valid_sorts))}[/red]"
         )
         raise typer.Exit(1)
+    if offset < 0:
+        console.print("[red]--offset must be >= 0.[/red]")
+        raise typer.Exit(1)
 
     sort_col = {
         "weight": "weight",
@@ -1283,6 +1285,7 @@ def list_nodes(
         source=source or None,
         sort_col=sort_col,
         limit=limit,
+        offset=offset,
     )
 
     if not nodes_page:
@@ -1345,9 +1348,16 @@ def list_nodes(
         )
 
     console.print(table)
-    if total > limit:
+    showing = len(nodes_page)
+    if total > offset + showing:
+        next_offset = offset + showing
         console.print(
-            f"[dim]Showing {limit} of {total} nodes. Use --limit to see more.[/dim]"
+            f"[dim]Showing {offset + 1}–{offset + showing} of {total} nodes. "
+            f"Use --offset {next_offset} to see the next page.[/dim]"
+        )
+    elif offset > 0:
+        console.print(
+            f"[dim]Showing {offset + 1}–{offset + showing} of {total} nodes.[/dim]"
         )
 
 
