@@ -1243,6 +1243,7 @@ def list_nodes(
         "weight", "--sort", help="Sort by: weight, created, accessed"
     ),
     limit: int = typer.Option(25, "--limit", "-n", help="Maximum nodes to show"),
+    offset: int = typer.Option(0, "--offset", help="Skip this many rows (for paging)"),
     output_json: bool = typer.Option(
         False, "--json", help="Output nodes as JSON instead of a table"
     ),
@@ -1269,6 +1270,9 @@ def list_nodes(
             f"[red]Invalid sort '{sort}'. Choose from: {', '.join(sorted(valid_sorts))}[/red]"
         )
         raise typer.Exit(1)
+    if offset < 0:
+        console.print("[red]--offset must be >= 0.[/red]")
+        raise typer.Exit(1)
 
     sort_col = {
         "weight": "weight",
@@ -1283,6 +1287,7 @@ def list_nodes(
         source=source or None,
         sort_col=sort_col,
         limit=limit,
+        offset=offset,
     )
 
     if not nodes_page:
@@ -1345,9 +1350,16 @@ def list_nodes(
         )
 
     console.print(table)
-    if total > limit:
+    showing = len(nodes_page)
+    if total > offset + showing:
+        next_offset = offset + showing
         console.print(
-            f"[dim]Showing {limit} of {total} nodes. Use --limit to see more.[/dim]"
+            f"[dim]Showing {offset + 1}–{offset + showing} of {total} nodes. "
+            f"Use --offset {next_offset} to see the next page.[/dim]"
+        )
+    elif offset > 0:
+        console.print(
+            f"[dim]Showing {offset + 1}–{offset + showing} of {total} nodes.[/dim]"
         )
 
 

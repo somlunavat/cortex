@@ -1090,6 +1090,7 @@ class Graph:
         source: str | None = None,
         sort_col: str = "weight",
         limit: int = 25,
+        offset: int = 0,
     ) -> tuple[list[Node], int]:
         """Return a page of nodes matching the given filters plus the total count.
 
@@ -1103,7 +1104,8 @@ class Graph:
             node_type: If set, only return nodes of this type.
             source: If set, only return nodes with this extraction source.
             sort_col: Column to sort by (must be pre-validated by caller).
-            limit: Maximum nodes to return.
+            limit: Maximum nodes to return per page.
+            offset: Number of matching rows to skip (for pagination).
 
         Returns:
             (nodes, total_count) where total_count may be > len(nodes).
@@ -1113,13 +1115,15 @@ class Graph:
             raise ValueError(
                 f"sort_col must be one of {allowed_sort}, got {sort_col!r}"
             )
+        if offset < 0:
+            raise ValueError(f"offset must be >= 0, got {offset}")
 
         where, params = _node_filter(project, tier=tier, source=source)
         if node_type is not None:
             where += " AND type = ?"
             params.append(node_type)
 
-        page_sql = f"SELECT id, type, tier, text, rationale, embedding, precision_bits, weight, project, scope, source, last_accessed, created_at, session_count FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ?"  # nosec B608
+        page_sql = f"SELECT id, type, tier, text, rationale, embedding, precision_bits, weight, project, scope, source, last_accessed, created_at, session_count FROM nodes WHERE {where} ORDER BY {sort_col} DESC LIMIT ? OFFSET ?"  # nosec B608
         count_sql = f"SELECT COUNT(*) FROM nodes WHERE {where}"  # nosec B608
         total: int = self._conn.execute(count_sql, params).fetchone()[0]
-        return self._exec_nodes(page_sql, [*params, limit]), total
+        return self._exec_nodes(page_sql, [*params, limit, offset]), total
