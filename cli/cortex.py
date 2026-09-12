@@ -1007,7 +1007,8 @@ def import_(
     # Batch embed all valid texts in one model forward pass
     embeddings = embed_batch([str(r.get("text", "")).strip() for r in valid])
 
-    # Second pass: write nodes
+    # Second pass: build Node objects and bulk-insert in one transaction
+    nodes_to_write: list[Node] = []
     for rec, embedding in zip(valid, embeddings, strict=True):
         text = str(rec.get("text", "")).strip()
 
@@ -1027,24 +1028,26 @@ def import_(
         if source not in _VALID_SOURCES:
             source = "jsonl"
 
-        node = Node(
-            id="",
-            type=node_type,
-            tier=tier,
-            text=text,
-            rationale=rec.get("rationale"),
-            embedding=embedding,
-            precision_bits=32,
-            weight=float(rec.get("weight", 1.0)),
-            project=project,
-            scope=scope,
-            source=source,
-            last_accessed=now,
-            created_at=now,
-            session_count=int(rec.get("session_count", 1)),
+        nodes_to_write.append(
+            Node(
+                id="",
+                type=node_type,
+                tier=tier,
+                text=text,
+                rationale=rec.get("rationale"),
+                embedding=embedding,
+                precision_bits=32,
+                weight=float(rec.get("weight", 1.0)),
+                project=project,
+                scope=scope,
+                source=source,
+                last_accessed=now,
+                created_at=now,
+                session_count=int(rec.get("session_count", 1)),
+            )
         )
-        g.write_node(node)
-        existing_texts.add(text)
+
+    g.write_nodes_bulk(nodes_to_write)
 
     imported = len(valid)
     console.print(
