@@ -367,8 +367,12 @@ class Graph:
         if not nodes:
             return []
 
-        embeddings = [n.embedding for n in nodes]  # type: ignore[misc]
-        sims = cosine_similarity_batch(embedding, embeddings)  # type: ignore[arg-type]
+        embeddings: list[np.ndarray] = [
+            n.embedding for n in nodes if n.embedding is not None
+        ]
+        if len(embeddings) != len(nodes):
+            nodes = [n for n in nodes if n.embedding is not None]
+        sims = cosine_similarity_batch(embedding, embeddings)
 
         scored = [
             (sim, node)
@@ -419,11 +423,13 @@ class Graph:
         # Build the corpus matrix once and batch all query embeddings into a
         # single matrix multiply: (N_queries, D) @ (D, M_corpus) → (N, M).
         # This collapses N separate cosine_similarity_batch calls into one BLAS op.
+        corpus_vecs: list[np.ndarray] = [
+            n.embedding for n in existing if n.embedding is not None
+        ]
+        if len(corpus_vecs) != len(existing):
+            existing = [n for n in existing if n.embedding is not None]
         corpus = np.stack(
-            [
-                e if e.dtype == np.float32 else e.astype(np.float32)  # type: ignore[union-attr]
-                for e in (n.embedding for n in existing)
-            ]
+            [e if e.dtype == np.float32 else e.astype(np.float32) for e in corpus_vecs]
         )  # (M, D)
         corpus_norms = np.linalg.norm(corpus, axis=1, keepdims=True)  # (M, 1)
         corpus_norms = np.where(corpus_norms > 0.0, corpus_norms, 1.0)

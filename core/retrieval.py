@@ -110,9 +110,10 @@ def vector_channel(
 
     if with_emb:
         idxs, emb_nodes = zip(*with_emb, strict=True)
-        sims = cosine_similarity_batch(
-            query_embedding, [n.embedding for n in emb_nodes]  # type: ignore[misc]
-        )
+        node_embeddings: list[np.ndarray] = [
+            n.embedding for n in emb_nodes if n.embedding is not None
+        ]
+        sims = cosine_similarity_batch(query_embedding, node_embeddings)
         for idx, node, sim in zip(idxs, emb_nodes, sims, strict=True):
             results[idx] = ScoredNode(node=node, score=max(0.0, float(sim)))
 

@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import re as _re
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -75,10 +75,10 @@ def _require_graph(project_path: str, *, exit_code: int = 0) -> tuple[Graph, str
 
 
 def _fmt_ts(ts: int | None) -> str:
-    """Format a unix timestamp as a human-readable local datetime string."""
+    """Format a unix timestamp as a human-readable UTC datetime string."""
     if not ts:
         return "—"
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 _UUID_RE = _re.compile(
@@ -1359,12 +1359,12 @@ def list_nodes(
     if total > offset + showing:
         next_offset = offset + showing
         console.print(
-            f"[dim]Showing {offset + 1}–{offset + showing} of {total} nodes. "
+            f"[dim]Showing {offset + 1}-{offset + showing} of {total} nodes. "
             f"Use --offset {next_offset} to see the next page.[/dim]"
         )
     elif offset > 0:
         console.print(
-            f"[dim]Showing {offset + 1}–{offset + showing} of {total} nodes.[/dim]"
+            f"[dim]Showing {offset + 1}-{offset + showing} of {total} nodes.[/dim]"
         )
 
 

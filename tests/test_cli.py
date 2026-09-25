@@ -584,7 +584,7 @@ class TestListCommand:
             _seed_node(tmp_db, project, text=f"node number {i}", tier=1)
         result = self._invoke_list(tmp_db, project, ["--limit", "3"])
         assert result.exit_code == 0
-        assert "Showing 1–3 of 10 nodes" in result.output
+        assert "Showing 1-3 of 10 nodes" in result.output
 
     def test_sort_by_created(self, tmp_db: Path, project: str) -> None:
         _seed_node(tmp_db, project, text="alpha node", tier=1)
@@ -1825,7 +1825,7 @@ class TestListValidation:
             _seed_node(tmp_db, project, text=f"paged node {i}", tier=1)
         result = self._invoke_list(tmp_db, project, ["--limit", "3"])
         assert result.exit_code == 0
-        assert "Showing 1–3 of 6 nodes" in result.output
+        assert "Showing 1-3 of 6 nodes" in result.output
 
 
 # ---------------------------------------------------------------------------
